@@ -1,10 +1,9 @@
 import {bodyTemplate,ENDING_TEMPLATE,templateUrl} from './templates.js';
 import {photoRoles,coverFit} from './photos.js';
 import {LOGO_PATH,LOGO_TEXT,logoBoxFor,logoTransform} from './logo.js';
-export const WIDTH=1080, HEIGHT=1350;
-const INK='#0A0A0A', PAPER='#EDEAE3', BLUE='#1712FF';
-// Matches the Figma cover spec: linear #000 at 0% opacity → 100% opacity at the 62% stop.
-const COVER_GRADIENT_STOPS=[{position:0,opacity:0},{position:0.62,opacity:1}];
+import {SPEC,bodyLayoutSpec} from './spec.js';
+export const WIDTH=SPEC.canvas.width, HEIGHT=SPEC.canvas.height;
+const {ink:INK,paper:PAPER,blue:BLUE,light:LIGHT}=SPEC.colors,{margin:MARGIN,contentWidth:CONTENT_WIDTH}=SPEC.canvas;
 const DEFAULT_MEASURE=(text,size)=>Array.from(text).reduce((sum,c)=>sum+(/\s/.test(c)?0.3:/[\u0000-\u007f]/.test(c)?0.54:1)*size,0);
 export function wrapText(value,width,size,measure=DEFAULT_MEASURE) {
   const result=[];
@@ -29,9 +28,24 @@ function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,
 }
 const rect=(name,x,y,width,height,fill,extra={})=>({type:'rect',name,x,y,width,height,fill,...extra});
 const img=(name,photo,x,y,width,height)=>({type:'image',name,src:photo,x,y,width,height});
-// Photo-bottom pages: logo only (no rule), cap top at 80px to match the side margin.
-function header(nodes,color) {nodes.push(text('D.one','D.one',80,72,200,26,color,700,undefined,50,'Editorial Serif'));}
-function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));}
+const logo=(x,y,size,color,boxWidth=200)=>text('D.one',LOGO_TEXT,x,y,boxWidth,size,color,700,undefined,100,'Editorial Serif');
+function header(nodes,color) {const {logoY,logoSize}=SPEC.body.header;nodes.push(logo(MARGIN,logoY,logoSize,color));}
+function footer(nodes,color) {
+  const {ruleY,ruleOpacity,logoY,logoSize}=SPEC.body.footer;
+  nodes.push(rect('Footer line',MARGIN,ruleY,CONTENT_WIDTH,1,color,{opacity:ruleOpacity}));nodes.push(logo(MARGIN,logoY,logoSize,color));
+}
+function coverTitleAndLogo(nodes,title,measure) {
+  const spec=SPEC.cover.title;
+  const node=text('Cover title',title,MARGIN,spec.minY,CONTENT_WIDTH,spec.fontSize,LIGHT,spec.fontWeight,measure,spec.maxHeight,spec.fontFamily);
+  node.lineHeight=spec.lineHeight;node.height=node.text.split('\n').length*node.lineHeight;
+  node.overflow=node.height>spec.maxHeight;
+  node.y=Math.max(spec.minY,Math.min(spec.maxY,spec.bottomY-node.height));
+  nodes.push(node);
+  const {fontSize,gapBelowTitle,hangulDescent}=SPEC.cover.logo;
+  const lastBaseline=node.y+node.fontSize+node.height-node.lineHeight;
+  const box=logoBoxFor(WIDTH/2,lastBaseline+hangulDescent+gapBelowTitle,fontSize);
+  nodes.push(logo(box.x,box.y,fontSize,LIGHT,152));
+}
 
 export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) {
   if(!project?.draft)return [];
@@ -56,37 +70,31 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
     }
     coverNodes.push(img('Cutout subject',asset.subject,fx,fy,fw,fh));
   }
-  coverNodes.push(rect('Title gradient',0,940,WIDTH,410,'gradient',{gradientStops:COVER_GRADIENT_STOPS}));
+  const {gradient}=SPEC.cover;
+  coverNodes.push(rect('Title gradient',0,gradient.y,WIDTH,gradient.height,'gradient',{gradientStops:gradient.stops}));
   if(!originalCover){
-    coverNodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT),opacity:.45});
+    coverNodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT),opacity:SPEC.cover.grainOpacity});
   }
-  const coverTitle=text('Cover title',draft.title,80,1030,920,90,'#fff',800,measure,350);
-  coverTitle.lineHeight=108;coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight;
-  coverTitle.overflow=coverTitle.height>350;
-  coverTitle.y=Math.max(880,Math.min(1050,1290-coverTitle.height))-40;
-  coverNodes.push(coverTitle);
-  // Hangul in Pretendard ExtraBold 90px ends ~8px below the baseline; the logo sits 50px under that.
-  const titleBottom=coverTitle.y+coverTitle.fontSize+(coverTitle.height-coverTitle.lineHeight)+8;
-  const logoBox=logoBoxFor(WIDTH/2,titleBottom+50,36);
-  coverNodes.push(text('D.one','D.one',logoBox.x,logoBox.y,152,36,'#fff',700,undefined,100,'Editorial Serif'));
+  coverTitleAndLogo(coverNodes,draft.title,measure);
   scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
   draft.cards.forEach((card,i)=>{
     const template=bodyTemplate(i),layout=card.layoutOverride||template.layout;
     const photo=card.photoAssigned?bodyPhotos.find(a=>a.id===card.photoId):bodyPhotos.find(a=>a.id===card.photoId)||bodyPhotos[i];
-    const paper=layout.startsWith('paper');const color=paper?INK:'#fff';
+    const paper=layout.startsWith('paper');const color=paper?INK:LIGHT;
+    const spec=bodyLayoutSpec(layout),{photoHeight}=SPEC.body;
     const nodes=[rect('Background',0,0,WIDTH,HEIGHT,paper?PAPER:INK)];
     const overlay=layout==='photo-overlay';const top=layout.endsWith('top');
     if(photo){
-      const slot={x:0,y:overlay?0:top?0:675,width:WIDTH,height:overlay?HEIGHT:675};
+      const slot={x:0,y:overlay||top?0:HEIGHT-photoHeight,width:WIDTH,height:overlay?HEIGHT:photoHeight};
       const [px,py,pw,ph]=coverFit(photo,slot.width,slot.height,card.photoPosition);
       nodes.push({...img('Article photo',photo.gray,px,slot.y+py,pw,ph),clip:slot});
     }
-    if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:0.76}));
-    let y=overlay?365:top?750:174;
-    const headline=text('Card title',card.title,80,y,920,55,color,700,measure,160);nodes.push(headline);
-    const bodyY=y+headline.height+64;
-    const body=text('Card body',card.body,80,bodyY,920,30,color,400,measure,Math.max(0,(overlay?1190:top?1225:645)-bodyY));nodes.push(body);
-    if(overlay||top)footer(nodes,overlay?'#fff':color);
+    if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:SPEC.body.overlayShadeOpacity}));
+    const {title:titleSpec,text:textSpec,titleToBody}=SPEC.body;
+    const headline=text('Card title',card.title,MARGIN,spec.titleY,CONTENT_WIDTH,titleSpec.fontSize,color,titleSpec.fontWeight,measure,titleSpec.maxHeight,titleSpec.fontFamily);nodes.push(headline);
+    const bodyY=spec.titleY+headline.height+titleToBody;
+    const body=text('Card body',card.body,MARGIN,bodyY,CONTENT_WIDTH,textSpec.fontSize,color,textSpec.fontWeight,measure,Math.max(0,spec.bodyLimit-bodyY),textSpec.fontFamily);nodes.push(body);
+    if(spec.brand==='footer')footer(nodes,overlay?LIGHT:color);
     else header(nodes,color);
     scenes.push({id:card.id,name:`${String(i+2).padStart(2,'0')} · ${card.title}`,kind:'article',templateFile:card.templateOverride||template.file,layout,width:WIDTH,height:HEIGHT,nodes});
   });

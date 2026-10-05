@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import {execute,providerName} from './ai.js';
 import {bodyTemplate} from '../shared/templates.js';
+import {SPEC} from '../shared/spec.js';
 
 const object = properties => ({ type:'object',properties,required:Object.keys(properties),additionalProperties:false });
 const string = {type:'string'};
@@ -97,7 +98,7 @@ export async function generateMagazine(source, angle, dir, progress,provider='co
     material=notes;
   }
   progress(`${providerName(provider)}가 기사 흐름과 카드 원고를 작성하고 있습니다`);
-  const draft=await executeWithEvidence(`${policy}\n표지부터 마무리까지 한 편의 기사처럼 연결되는 원고를 작성하라. 카드 수는 내용에 따라 3~12개 범위에서 결정하며 억지로 채우지 않는다. body는 카드마다 한국어 약 100~180자, 제목은 공백 포함 16자 이내. 텍스트는 제목 Pretendard Bold 55px, 본문 Regular 30px이며 제목과 본문 사이 64px를 유지해야 하므로 원고를 짧고 밀도 있게 쓴다. 도입·구체적 사례·창업가에게 주는 의미·마무리를 연결한다. title은 2~3줄로 읽기 좋은 12~32자 제목이다. subtitle은 짧은 보조 문구. cover_titles는 같은 기사에 어울리는 표지 제목 후보 3개다. 카드마다 evidence가 반드시 1개 이상 있어야 한다. 원문 화자가 1, 2, 3 / 첫째·둘째·셋째 / 1단계·2단계처럼 번호를 붙여 내용을 진행하면 그 번호 구조를 기사에 살린다: 번호가 붙은 항목마다 카드를 만들고 원문의 번호와 순서를 그대로 유지하며, 그 카드의 section_number에 원문의 번호를, title에는 번호를 뺀 소제목만 쓴다. 번호가 없는 도입·사례·마무리 카드와 원문에 번호 구조가 없을 때는 section_number를 null로 둔다. 번호 항목을 합치거나 건너뛰거나 번호를 새로 매기지 않는다. 본문 템플릿은 photo-overlay → dark-top → dark-bottom → dark-bottom → photo-overlay 순서로 반복되며 카드 번호에 따라 해당 layout을 사용한다. 영상 전체 번역을 만들지 않는다. 원문에 있는 사실과 사례를 바탕으로 쓰고 해석을 검증된 사실처럼 단정하지 않는다. 이를 설명하기 위해 영상을 소개하는 문장을 추가하지 않는다.\n영상 메타: ${JSON.stringify({title:source.title,author:source.author,url:source.url})}\n사용자가 요청한 관점: ${JSON.stringify(angle || '자동 선택')}\n자료(JSON):\n${JSON.stringify(material)}`,magazineSchema,dir,'magazine',source.segments,progress,runner);
+  const draft=await executeWithEvidence(`${policy}\n표지부터 마무리까지 한 편의 기사처럼 연결되는 원고를 작성하라. 카드 수는 내용에 따라 3~12개 범위에서 결정하며 억지로 채우지 않는다. body는 카드마다 한국어 약 100~180자, 제목은 공백 포함 16자 이내. 텍스트는 제목 Pretendard Bold ${SPEC.body.title.fontSize}px, 본문 Regular ${SPEC.body.text.fontSize}px이며 제목과 본문 사이 ${SPEC.body.titleToBody}px를 유지해야 하므로 원고를 짧고 밀도 있게 쓴다. 도입·구체적 사례·창업가에게 주는 의미·마무리를 연결한다. title은 2~3줄로 읽기 좋은 12~32자 제목이다. subtitle은 짧은 보조 문구. cover_titles는 같은 기사에 어울리는 표지 제목 후보 3개다. 카드마다 evidence가 반드시 1개 이상 있어야 한다. 원문 화자가 1, 2, 3 / 첫째·둘째·셋째 / 1단계·2단계처럼 번호를 붙여 내용을 진행하면 그 번호 구조를 기사에 살린다: 번호가 붙은 항목마다 카드를 만들고 원문의 번호와 순서를 그대로 유지하며, 그 카드의 section_number에 원문의 번호를, title에는 번호를 뺀 소제목만 쓴다. 번호가 없는 도입·사례·마무리 카드와 원문에 번호 구조가 없을 때는 section_number를 null로 둔다. 번호 항목을 합치거나 건너뛰거나 번호를 새로 매기지 않는다. 본문 템플릿은 photo-overlay → dark-top → dark-bottom → dark-bottom → photo-overlay 순서로 반복되며 카드 번호에 따라 해당 layout을 사용한다. 영상 전체 번역을 만들지 않는다. 원문에 있는 사실과 사례를 바탕으로 쓰고 해석을 검증된 사실처럼 단정하지 않는다. 이를 설명하기 위해 영상을 소개하는 문장을 추가하지 않는다.\n영상 메타: ${JSON.stringify({title:source.title,author:source.author,url:source.url})}\n사용자가 요청한 관점: ${JSON.stringify(angle || '자동 선택')}\n자료(JSON):\n${JSON.stringify(material)}`,magazineSchema,dir,'magazine',source.segments,progress,runner);
   if(!draft.title.trim() || draft.cards.length < 1 || draft.cards.length > 16) throw new Error('생성된 기사 구성을 읽을 수 없습니다. 다시 생성해 주세요.');
   const cards=draft.cards.map((c,i)=>{
     if(!c.title.trim() || !c.body.trim() || !c.evidence.length) throw new Error('근거가 없는 카드가 생성되었습니다. 다시 시도해 주세요.');
