@@ -63,11 +63,11 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
   const coverTitle=text('Cover title',draft.title,80,1030,920,90,'#fff',800,measure,350);
   coverTitle.lineHeight=108;coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight;
   coverTitle.overflow=coverTitle.height>350;
-  coverTitle.y=Math.max(880,Math.min(1050,1290-coverTitle.height))-20;
+  coverTitle.y=Math.max(880,Math.min(1050,1290-coverTitle.height))-40;
   coverNodes.push(coverTitle);
-  // Hangul in Pretendard ExtraBold 90px ends ~8px below the baseline; the logo sits 40px under that.
+  // Hangul in Pretendard ExtraBold 90px ends ~8px below the baseline; the logo sits 50px under that.
   const titleBottom=coverTitle.y+coverTitle.fontSize+(coverTitle.height-coverTitle.lineHeight)+8;
-  const logoBox=logoBoxFor(WIDTH/2,titleBottom+40,36);
+  const logoBox=logoBoxFor(WIDTH/2,titleBottom+50,36);
   coverNodes.push(text('D.one','D.one',logoBox.x,logoBox.y,152,36,'#fff',700,undefined,100,'Editorial Serif'));
   scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
   draft.cards.forEach((card,i)=>{
