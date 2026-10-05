@@ -41,6 +41,18 @@ function App(){
     });
   }
   useEffect(()=>{document.querySelector('.page-thumb.selected')?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});},[selected,project?.draft.cards]);
+  function goToPage(index){
+    if(!project||index<0||index>=scenes.length)return;
+    setSelected(index);setVariants(false);
+  }
+  useEffect(()=>{
+    function onKey(e){
+      if(!project||e.altKey||e.metaKey||e.ctrlKey||!['ArrowLeft','ArrowRight'].includes(e.key))return;
+      if(e.target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+      e.preventDefault();goToPage(selected+(e.key==='ArrowRight'?1:-1));
+    }
+    window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);
+  });
   function movePage(id,target){
     if(!project||busy||exporting)return;
     const cards=pinPages(project),from=cards.findIndex(c=>c.id===id);
@@ -190,6 +202,7 @@ function App(){
         {error&&<div className="error-banner" role="alert"><span>{error}</span><button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
         <div className={`canvas-stage ${busy?'processing':''}`}>
           {!project?<div className="reference-poster"><img src="/references/selective-color.png" alt="표지 스타일 참조: 사진 요소 선택 착색과 인쇄 질감"/><div className="reference-caption"><span>STYLE REFERENCE</span><span>사진과 영상으로 새 초안을 만드세요</span></div></div>:variants&&selected===0?<div className="variant-grid">{[0,1,2].map(v=><button key={v} className={`variant ${project.coverVariant===v?'selected':''}`} onClick={()=>{setProject(p=>({...p,coverVariant:v}));setVariants(false);}}><div dangerouslySetInnerHTML={{__html:sceneSvg(makeScenes(project,project.photos,v,measure)[0])}}/><span>구도 {String(v+1).padStart(2,'0')}{project.coverVariant===v&&<Check size={14}/>}</span></button>)}</div>:<div className="poster" aria-label="매거진 미리보기" dangerouslySetInnerHTML={{__html:sceneSvg(scene)}}/>}
+          {project&&!variants&&<><button className="page-nav prev" aria-label="이전 페이지" title="이전 페이지 (←)" disabled={selected===0} onClick={()=>goToPage(selected-1)}><ChevronLeft size={22}/></button><button className="page-nav next" aria-label="다음 페이지" title="다음 페이지 (→)" disabled={selected===scenes.length-1} onClick={()=>goToPage(selected+1)}><ChevronRight size={22}/></button></>}
           {busy&&<div className="progress-overlay" role="status"><LoaderCircle size={28} className="spin"/><strong>{busy.label}</strong><p>{busy.message}</p><span>이 창을 열어 둔 채 기다려 주세요.</span></div>}
         </div>
         {project?<div className="filmstrip">{scenes.map((s,i)=>{
