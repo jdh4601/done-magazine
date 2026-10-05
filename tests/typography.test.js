@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {makeScenes,sceneSvg} from '../shared/scene.js';
+import {LOGO_PATH} from '../shared/logo.js';
 
 const project=count=>({draft:{title:'고객의 문제에서 시작하는 법',cards:Array.from({length:count},(_,i)=>({id:`c${i}`,title:'작게 시작하라',body:'고객이 겪는 문제를 듣고 첫 제품의 범위를 정한다.',layout:'paper-top',emphasis:''}))}});
 test('Magazine uses exact Pretendard weights, sizes and 64px text spacing',()=>{
@@ -39,11 +41,14 @@ test('Cover always has the bottom black gradient with Figma stops 0%→62%',()=>
     assert.match(svg,/<stop offset="0" stop-color="#000" stop-opacity="0"\/><stop offset="0.62" stop-color="#000" stop-opacity="1"\/>/);
   }
 });
-test('D.one logo is drawn as a Playfair Bold vector path so PNG export never falls back to sans-serif',()=>{
+test('D.one logo uses the official brand SVG path so PNG export never falls back to sans-serif',()=>{
+  const official=fs.readFileSync(new URL('../public/brand/D.one.svg',import.meta.url),'utf8').match(/ d="([^"]+)"/)[1];
+  assert.equal(LOGO_PATH,official);
   const scenes=makeScenes({...project(1),coverStyle:'original'});
   for(const scene of scenes.slice(0,2)){
     const svg=sceneSvg(scene);
     assert.ok(!/<text[^>]*>(<tspan[^>]*>)?D\.one</.test(svg),`${scene.id} still renders the logo as font text`);
+    assert.ok(svg.includes(`d="${official}"`));
     assert.match(svg,/<path d="M[^"]+" fill="#[0-9A-Fa-f]{3,6}" transform="translate\([\d.]+ [\d.]+\) scale\([\d.]+\)" aria-label="D\.one"\/>/);
   }
 });

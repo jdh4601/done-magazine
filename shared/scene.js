@@ -1,6 +1,6 @@
 import {bodyTemplate,ENDING_TEMPLATE,templateUrl} from './templates.js';
 import {photoRoles,coverFit} from './photos.js';
-import {LOGO_PATH,LOGO_TEXT} from './logo.js';
+import {LOGO_PATH,LOGO_TEXT,logoTransform} from './logo.js';
 export const WIDTH=1080, HEIGHT=1350;
 const INK='#0A0A0A', PAPER='#EDEAE3', BLUE='#1712FF';
 // Matches the Figma cover spec: linear #000 at 0% opacity → 100% opacity at the 62% stop.
@@ -103,7 +103,7 @@ export function sceneSvg(scene,resolveImage=s=>s) {
       if(n.clip)content+=`<defs><clipPath id="photo-${index}"><rect x="${n.clip.x}" y="${n.clip.y}" width="${n.clip.width}" height="${n.clip.height}"/></clipPath></defs>`;
       content+=`<image href="${escapeXml(resolveImage(n.src))}" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" opacity="${opacity}"${n.clip?` clip-path="url(#photo-${index})"`:''} preserveAspectRatio="xMidYMid slice"/>`;
     }
-    else if(n.type==='text'&&n.fontFamily==='Editorial Serif'&&n.text===LOGO_TEXT) content+=`<path d="${LOGO_PATH}" fill="${escapeXml(n.color)}" transform="translate(${n.x} ${n.y+n.fontSize}) scale(${n.fontSize})" aria-label="${LOGO_TEXT}"/>`;
+    else if(n.type==='text'&&n.fontFamily==='Editorial Serif'&&n.text===LOGO_TEXT) content+=`<path d="${LOGO_PATH}" fill="${escapeXml(n.color)}" transform="${logoTransform(n.x,n.y,n.fontSize)}" aria-label="${LOGO_TEXT}"/>`;
     else if(n.type==='text') content+=`<text x="${n.x}" y="${n.y}" fill="${escapeXml(n.color)}" font-family="${n.fontFamily==='Editorial Serif'?'Playfair Display':escapeXml(n.fontFamily)}" font-size="${n.fontSize}" font-weight="${n.fontWeight}">${n.text.split('\n').map((l,i)=>`<tspan x="${n.x}" y="${n.y+n.fontSize+i*n.lineHeight}">${escapeXml(l)}</tspan>`).join('')}</text>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}">${content}</svg>`;
