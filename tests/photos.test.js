@@ -23,9 +23,13 @@ test('All cover styles and body layouts add grain over photos, keeping text and 
     const scenes=makeScenes({coverStyle,draft:{title:'표지',cards:['photo-overlay','dark-top','dark-bottom','paper-top','paper-bottom'].map((layoutOverride,i)=>({id:`c${i}`,title:'제목',body:'본문',layoutOverride,photoAssigned:true,photoId:'body'}))}},photos);
     const grain=scenes[0].nodes.findIndex(n=>n.name==='Dry ink and paper grain');
     assert.ok(grain>=0&&grain<scenes[0].nodes.findIndex(n=>n.name==='Cover title'));
+    assert.equal(scenes[0].nodes[grain].src,'/assets/cover-grain.png');
+    assert.equal(scenes[0].nodes[grain].opacity,.32);
     for(const scene of scenes.slice(1,-1)){
       const photo=scene.nodes.find(n=>n.name==='Article photo'),noise=scene.nodes.find(n=>n.name==='Dry ink and paper grain');
       assert.equal(photo.src,'body-color.png');
+      assert.equal(noise.src,'/assets/editorial-grain.png');
+      assert.equal(noise.opacity,.45);
       assert.deepEqual(noise.clip,photo.clip);
       assert.equal(noise.y,photo.clip.y);assert.equal(noise.height,photo.clip.height);
       assert.ok(scene.nodes.indexOf(noise)<scene.nodes.findIndex(n=>n.name==='Card title'));
@@ -58,4 +62,52 @@ test('Cover and body uploads are separate and body photos follow page order',()=
   assert.ok(!scenes.slice(1,-1).some(s=>s.nodes.some(n=>n.src==='cover-gray')));
   assert.equal(photoRoles(null,photos.slice(1)).cover,undefined);
   assert.equal(scenes.at(-1).nodes[0].src,'/templates/%237.jpg');
+});
+
+test('Cover candidates stay separate from body photos and the selected cover survives saving',()=>{
+  const covers=Array.from({length:3},(_,i)=>({id:`cover${i}`,role:'cover',original:`cover${i}.png`}));
+  const body={id:'body',role:'body',original:'body.png'};
+  for(const selected of covers){
+    const project=JSON.parse(JSON.stringify({coverPhotoId:selected.id,coverStyle:'original',photos:[...covers,body],draft:{title:'표지',cards:[{id:'card',title:'본문',body:'내용',photoAssigned:true,photoId:'body'}]}}));
+    const roles=photoRoles(project,project.photos);
+    assert.equal(roles.cover.id,selected.id);
+    assert.deepEqual(roles.covers,covers);
+    assert.deepEqual(roles.body,[body]);
+    const scenes=makeScenes(project,project.photos);
+    assert.equal(scenes[0].nodes.find(n=>n.name==='Original cover photo').src,selected.original);
+    assert.equal(scenes[1].nodes.find(n=>n.name==='Article photo').src,'body.png');
+  }
+  const remaining=[covers[1],covers[2],body];
+  assert.equal(photoRoles({coverPhotoId:covers[0].id},remaining).cover.id,covers[1].id);
+  assert.equal(photoRoles(null,[body]).cover,undefined);
+});
+
+test('Three cover candidates and sixteen body photos are accepted, exceeding either limit is rejected',async()=>{
+  const {validatePhotoCounts}=await import('../shared/photos.js');
+  const covers=Array.from({length:3},(_,i)=>({id:`cover${i}`,role:'cover'}));
+  const body=Array.from({length:16},(_,i)=>({id:`body${i}`,role:'body'}));
+  assert.doesNotThrow(()=>validatePhotoCounts([...covers,...body]));
+  assert.throws(()=>validatePhotoCounts([...covers,{id:'extra',role:'cover'},...body]),/최대 3장/);
+  assert.throws(()=>validatePhotoCounts([...covers,...body,{id:'extra',role:'body'}]),/최대 16장/);
+  assert.throws(()=>validatePhotoCounts(null));
+  assert.deepEqual(photoRoles(null,[{id:'legacy'},...body]).covers,[{id:'legacy'}]);
+});
+
+test('Editing and switching cover candidates preserves their framing and leaves generated body content untouched',async()=>{
+  const {selectCoverPhoto}=await import('../shared/photos.js');
+  const first={id:'first',role:'cover',original:'first.png'},second={id:'second',role:'cover',original:'second.png'},body={id:'body',role:'body',original:'body.png'};
+  const original={coverPhotoId:'first',coverPhotoPosition:{x:30,y:-20,zoom:1.4},coverVariant:2,photos:[first,second,body],draft:{title:'표지',caption:'캡션',cards:[{id:'card',title:'편집한 본문',body:'수정한 원고',photoAssigned:true,photoId:'body',layoutOverride:'dark-top'}]}};
+  const switched=selectCoverPhoto(original,'second');
+  assert.strictEqual(switched.draft,original.draft);
+  assert.strictEqual(switched.photos[2],body);
+  assert.equal(switched.coverPhotoId,'second');
+  assert.deepEqual(switched.coverPhotoPosition,{x:0,y:0,zoom:1});
+  assert.equal(switched.coverVariant,0);
+  switched.coverPhotoPosition={x:-15,y:12,zoom:1.1};
+  const restored=selectCoverPhoto(JSON.parse(JSON.stringify(switched)),'first');
+  assert.deepEqual(restored.coverPhotoPosition,original.coverPhotoPosition);
+  assert.equal(restored.coverVariant,2);
+  assert.deepEqual(selectCoverPhoto(restored,'second').coverPhotoPosition,switched.coverPhotoPosition);
+  assert.strictEqual(selectCoverPhoto(original,'missing'),original);
+  assert.strictEqual(selectCoverPhoto(original,'first'),original);
 });

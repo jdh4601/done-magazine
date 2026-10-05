@@ -45,7 +45,7 @@ test('Selective colour preserves photo alignment without decorative orange shape
   const asset={id:'photo',blue:'/blue.png',gray:'/gray.png',subject:'/subject.png',accents:'/accents.png',coverStyleVersion:2,subjectWidth:1600,subjectHeight:900};
   for(const variant of [0,1,2]){
     const cover=makeScenes({coverPhotoId:'photo',draft:{title:'제목',cards:[]}},[asset],variant)[0];
-    const layers=cover.nodes.filter(n=>n.type==='image'&&n.src!='/assets/editorial-grain.png');
+    const layers=cover.nodes.filter(n=>n.type==='image'&&n.src!='/assets/cover-grain.png');
     assert.equal(layers.length,3);
     assert.deepEqual(layers.map(n=>[n.x,n.y,n.width,n.height]),Array(3).fill([layers[0].x,layers[0].y,layers[0].width,layers[0].height]));
     assert.ok(!cover.nodes.some(n=>n.type==='ellipse'||n.fill==='#FF660F'));
@@ -59,6 +59,6 @@ test('Figma import uses loaded fonts, native text and separate image/shape layer
   const figma={showUI(){},ui:{postMessage:m=>messages.push(m)},currentPage:{children:[],selection:[]},viewport:{scrollAndZoomIntoView(){}},listAvailableFontsAsync:async()=>['Pretendard','Playfair Display'].flatMap(family=>['Regular','Bold','ExtraBold'].map(style=>({fontName:{family,style}}))),loadFontAsync:async f=>loaded.add(`${f.family}-${f.style}`),base64Decode:s=>new Uint8Array(Buffer.from(s,'base64')),createImage:()=>({hash:'image-hash'}),createFrame:()=>{const f=node('FRAME');created.push(f);return f;},createText:()=>{const t=node('TEXT');Object.defineProperty(t,'characters',{set(s){assert.ok(loaded.has(`${t.fontName.family}-${t.fontName.style}`));t._characters=s;},get(){return t._characters;}});return t;},createRectangle:()=>node('RECTANGLE'),createEllipse:()=>node('ELLIPSE')};
   const context=vm.createContext({figma,__html__:'',Uint8Array});vm.runInContext(code,context);
   const scenes=makeScenes({draft:{title:'검증 제목',cards:[]}});
-  await figma.ui.onmessage({type:'import',document:{version:1,scenes,assets:{'/assets/editorial-grain.png':'aW1hZ2U=','/templates/%237.jpg':'aW1hZ2U='}}});
+  await figma.ui.onmessage({type:'import',document:{version:1,scenes,assets:{'/assets/editorial-grain.png':'aW1hZ2U=','/assets/cover-grain.png':'aW1hZ2U=','/templates/%237.jpg':'aW1hZ2U='}}});
   assert.equal(created.length,2);assert.ok(created[0].children.some(n=>n.type==='TEXT'));assert.ok(!created[0].children.some(n=>n.type==='ELLIPSE'));assert.equal(messages.at(-1).type,'complete');
 });

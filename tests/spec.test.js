@@ -8,14 +8,16 @@ import {BODY_TEMPLATES,ENDING_TEMPLATE} from '../shared/templates.js';
 // Changing any value here must be a deliberate design decision.
 test('Spec values are locked',()=>{
   assert.deepEqual(SPEC.canvas,{width:1080,height:1350,margin:80,contentWidth:920});
-  assert.deepEqual(SPEC.colors,{ink:'#0A0A0A',paper:'#EDEAE3',blue:'#1712FF',light:'#fff'});
+  assert.deepEqual(SPEC.colors,{ink:'#0A0A0A',paper:'#EDEAE3',blue:'#001AFF',light:'#fff'});
   assert.deepEqual(SPEC.cover,{
     gradient:{y:940,height:410,stops:[{position:0,opacity:0},{position:0.62,opacity:1}]},
-    grainOpacity:0.45,
+    grainOpacity:0.32,
+    blueHighlight:'#163BFF',
     title:{fontFamily:'Pretendard',fontWeight:800,fontSize:90,lineHeight:108,maxHeight:350,minY:840,maxY:1010,bottomY:1250},
     logo:{fontSize:36,gapBelowTitle:50,hangulDescent:8},
   });
   assert.deepEqual(SPEC.body,{
+    grainOpacity:0.45,
     title:{fontFamily:'Pretendard',fontWeight:700,fontSize:55,maxHeight:160},
     text:{fontFamily:'Pretendard',fontWeight:400,fontSize:30},
     titleToBody:64,

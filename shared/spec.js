@@ -9,11 +9,12 @@ function deepFreeze(value) {
 
 export const SPEC=deepFreeze({
   canvas:{width:1080,height:1350,margin:80,contentWidth:920},
-  colors:{ink:'#0A0A0A',paper:'#EDEAE3',blue:'#1712FF',light:'#fff'},
+  colors:{ink:'#0A0A0A',paper:'#EDEAE3',blue:'#001AFF',light:'#fff'},
   cover:{
     // Figma cover gradient: #000 at 0% opacity → 100% opacity at the 62% stop.
     gradient:{y:940,height:410,stops:[{position:0,opacity:0},{position:0.62,opacity:1}]},
-    grainOpacity:0.45,
+    grainOpacity:0.32,
+    blueHighlight:'#163BFF',
     // Title box top = clamp(minY, maxY, bottomY − title height); left-aligned at the margin.
     title:{fontFamily:'Pretendard',fontWeight:800,fontSize:90,lineHeight:108,maxHeight:350,minY:840,maxY:1010,bottomY:1250},
     // Logo is centered; its cap top sits gapBelowTitle under the visible bottom of the title.
@@ -21,6 +22,7 @@ export const SPEC=deepFreeze({
     logo:{fontSize:36,gapBelowTitle:50,hangulDescent:8},
   },
   body:{
+    grainOpacity:0.45,
     title:{fontFamily:'Pretendard',fontWeight:700,fontSize:55,maxHeight:160},
     text:{fontFamily:'Pretendard',fontWeight:400,fontSize:30},
     titleToBody:64,

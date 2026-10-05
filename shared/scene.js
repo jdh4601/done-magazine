@@ -73,7 +73,7 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
   const {gradient}=SPEC.cover;
   coverNodes.push(rect('Title gradient',0,gradient.y,WIDTH,gradient.height,'gradient',{gradientStops:gradient.stops}));
   if(asset){
-    coverNodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT),opacity:SPEC.cover.grainOpacity});
+    coverNodes.push({...img('Dry ink and paper grain','/assets/cover-grain.png',0,0,WIDTH,HEIGHT),opacity:SPEC.cover.grainOpacity});
   }
   coverTitleAndLogo(coverNodes,draft.title,measure);
   scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
@@ -88,7 +88,7 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
       const slot={x:0,y:overlay||top?0:HEIGHT-photoHeight,width:WIDTH,height:overlay?HEIGHT:photoHeight};
       const [px,py,pw,ph]=coverFit(photo,slot.width,slot.height,card.photoPosition);
       nodes.push({...img('Article photo',photo.original,px,slot.y+py,pw,ph),clip:slot});
-      nodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',slot.x,slot.y,slot.width,slot.height),opacity:SPEC.cover.grainOpacity,clip:slot});
+      nodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',slot.x,slot.y,slot.width,slot.height),opacity:SPEC.body.grainOpacity,clip:slot});
     }
     if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:SPEC.body.overlayShadeOpacity}));
     const {title:titleSpec,text:textSpec,titleToBody}=SPEC.body;

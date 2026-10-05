@@ -1,7 +1,7 @@
 """Apply selective colour to real secondary objects, preserving source coordinates."""
 import json, sys
 import numpy as np
-from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageChops
 from rembg import remove, new_session
 
 source, output_dir, plan_file = sys.argv[1:4]
@@ -24,7 +24,16 @@ def object_mask(box):
     mask.paste(cutout.getchannel('A'), region[:2])
     return mask
 
-subject_mask = object_mask(plan['subject'])
+# Segment the subject with the full frame as context. Cropping to the AI box
+# caused dark jackets and arms to disappear and hard-clipped anything outside it.
+# Secondary objects still use their own crops for selective colour below.
+subject_mask = remove(image, session=session).getchannel('A')
+if plan.get('subjectType') == 'person':
+    # The general model can make dark clothing translucent. Retain body regions
+    # found by the person model, while keeping fine hair from the general mask.
+    person_session = new_session('u2net_human_seg', providers=['CPUExecutionProvider'])
+    person_mask = remove(image, session=person_session).getchannel('A')
+    subject_mask = ImageChops.lighter(subject_mask, person_mask)
 if not subject_mask.getbbox():
     raise RuntimeError('주 피사체를 분리하지 못했습니다. 다른 사진을 사용하세요.')
 mono = ImageOps.grayscale(image)
@@ -50,6 +59,6 @@ accent = np.dstack([rgb,accent_alpha*255]).astype(np.uint8)
 Image.fromarray(accent,'RGBA').save(output_dir+'/accents.png')
 
 # A background duotone that preserves dark outlines without artificial colour planes.
-background = ImageOps.colorize(mono, '#1712FF', '#5550FF')
+background = ImageOps.colorize(mono, sys.argv[4], sys.argv[5])
 background.save(output_dir+'/blue.png')
 print(json.dumps({'accentPixelCount':int(np.count_nonzero(accent[:,:,3]))}))

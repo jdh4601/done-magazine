@@ -25,3 +25,17 @@ test('Saved failing output resolves sentences split across adjacent captions',as
   const source=JSON.parse(await fs.readFile(new URL('transcript.json',dir)));
   for(const card of draft.cards)assert.ok(validateEvidence(card.evidence,source.segments).length);
 });
+
+test('Title candidates retry duplicates and wrong counts while keeping source evidence',async()=>{
+  const valid=['회의만 바꾸면 팀은 안 움직인다','전환에는 불편한 선택이 따른다','당신의 우선순위는 배치에 있는가'];
+  const attempts=[['반복 제목','반복  제목','세 번째 제목'],['하나','둘'],valid];
+  const prompts=[];
+  const result=await executeWithEvidence('prompt',{},'.','titles',[{id:7,text:'Original source',start:5}],()=>{},async prompt=>{
+    prompts.push(prompt);
+    return {cover_titles:attempts[prompts.length-1],cards:[{evidence:[{segment_id:7}]}]};
+  });
+  assert.equal(prompts.length,3);
+  assert.match(prompts[1],/정확히 3개/);
+  assert.deepEqual(result.cover_titles,valid);
+  await assert.rejects(executeWithEvidence('prompt',{},'.','titles',[{id:7,text:'Original source',start:5}],()=>{},async()=>({cover_titles:['하나'],cards:[{evidence:[{segment_id:7}]}]})),/제목 후보/);
+});
