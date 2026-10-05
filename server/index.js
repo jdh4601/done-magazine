@@ -13,6 +13,7 @@ import { downloadTranscript, parseTranscript, videoId } from './transcript.js';
 import { generateMagazine, generateCaption } from './codex.js';
 import { processPhoto, ensureNoise, withContentBounds } from './photos.js';
 import { sceneSvg } from '../shared/scene.js';
+import { textOnlyCards } from '../shared/pages.js';
 import {ENDING_TEMPLATE,templateUrl} from '../shared/templates.js';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -85,6 +86,7 @@ app.post('/api/generate',async(req,res)=>{
       else {progress('YouTube 자막을 다운로드하고 있습니다');source=await downloadTranscript(url.trim(),workDir);}
       if(source.segments.reduce((sum,s)=>sum+s.text.length,0)<80)throw new Error('매거진을 만들기에 자막 내용이 너무 짧습니다.');
       const draft=await generateMagazine(source,String(angle).slice(0,1000),workDir,progress,provider);
+      draft.cards=textOnlyCards(draft.cards);
       const project={id:projectId,draft,source,photos,provider,coverPhotoId:photos.find(p=>p.id===coverPhotoId)?.id||photos.find(p=>p.role==='cover')?.id||null,coverVariant:0,coverStyle:coverStyle==='original'?'original':'editorial',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
       await saveProject(project);return project;
     } finally {activeGeneration=false;}

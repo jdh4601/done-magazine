@@ -8,12 +8,12 @@ export async function processPhoto(file,root,id,progress,role='cover',style='edi
   const dir=path.join(root,'data','photos',id);await fs.mkdir(dir,{recursive:true});
   const normalized=path.join(dir,'original.png');
   await sharp(file.buffer,{limitInputPixels:45000000}).rotate().trim({background:'#ffffff',threshold:10}).resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).png().toFile(normalized);
-  progress('흑백 대비와 사진 톤을 보정하고 있습니다');
-  await sharp(normalized).grayscale().linear(1.55,-36).png().toFile(path.join(dir,'gray.png'));
   if(role==='body'||style==='original'){
     const meta=await sharp(normalized).metadata();
-    return {id,role,name:file.originalname,original:`/assets/photos/${id}/original.png`,gray:`/assets/photos/${id}/gray.png`,sourceWidth:meta.width,sourceHeight:meta.height};
+    return {id,role,name:file.originalname,original:`/assets/photos/${id}/original.png`,sourceWidth:meta.width,sourceHeight:meta.height};
   }
+  progress('흑백 대비와 사진 톤을 보정하고 있습니다');
+  await sharp(normalized).grayscale().linear(1.55,-36).png().toFile(path.join(dir,'gray.png'));
   progress('Codex가 주 피사체와 강조할 주변 요소를 찾고 있습니다');
   const plan=await analyzePhoto(normalized,dir,provider);
   await fs.writeFile(path.join(dir,'plan.json'),JSON.stringify(plan));

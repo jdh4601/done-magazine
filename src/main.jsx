@@ -17,13 +17,17 @@ const pageNames={'dark-top':'사진 위 · 검정','dark-bottom':'사진 아래 
 function App(){
   const [status,setStatus]=useState(null),[url,setUrl]=useState(''),[angle,setAngle]=useState(''),[sourceTitle,setSourceTitle]=useState(''),[transcript,setTranscript]=useState('');
   const [coverStyle,setCoverStyle]=useState('editorial'),[manual,setManual]=useState(false),[provider,setProvider]=useState('codex'),[photos,setPhotos]=useState([]),[project,setProject]=useState(null),[selected,setSelected]=useState(0),[templateCardId,setTemplateCardId]=useState(null);
-  const [busy,setBusy]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[saved,setSaved]=useState(''),[history,setHistory]=useState(null),[fontReady,setFontReady]=useState(0),[variants,setVariants]=useState(false),[exporting,setExporting]=useState(false),[dragged,setDragged]=useState(null);
+  const [busy,setBusy]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[saved,setSaved]=useState(''),[history,setHistory]=useState(null),[fontReady,setFontReady]=useState(0),[variants,setVariants]=useState(false),[exporting,setExporting]=useState(false),[dragged,setDragged]=useState(null),[dropTarget,setDropTarget]=useState(null),[photoPreview,setPhotoPreview]=useState(null);
   const photoInput=useRef(),bodyPhotoInput=useRef(),pagePhotoInput=useRef(),transcriptInput=useRef(),saveQueue=useRef(Promise.resolve()),loaded=useRef(null);
   useEffect(()=>{api('/api/status').then(setStatus).catch(e=>setError(e.message));Promise.all([400,700,800].map(weight=>document.fonts.load(`${weight} 30px Pretendard`))).then(()=>document.fonts.ready).then(()=>setFontReady(1));},[]);
   useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),6000);return()=>clearTimeout(t);},[notice]);
   const measure=useMemo(()=>{const context=document.createElement('canvas').getContext('2d');return (value,size,weight=400,family='Pretendard')=>{context.font=`${weight} ${size}px "${family}"`;return context.measureText(value).width;};},[fontReady]);
-  const scenes=useMemo(()=>makeScenes(project,project?.photos||photos,project?.coverVariant||0,measure),[project,photos,measure]);
+  const scenes=useMemo(()=>{
+    const preview=photoPreview&&project?{...project,photos:[...project.photos,photoPreview.photo],draft:{...project.draft,cards:project.draft.cards.map(c=>c.id===photoPreview.cardId?{...c,photoAssigned:true,photoId:photoPreview.photo.id,photoPosition:{x:0,y:0,zoom:1}}:c)}}:project;
+    return makeScenes(preview,preview?.photos||photos,preview?.coverVariant||0,measure);
+  },[project,photos,measure,photoPreview]);
   const {cover:coverPhoto,body:bodyPhotos}=photoRoles(project,photos);
+  const assignedPhotoCount=scenes.slice(1,-1).filter(s=>s.nodes.some(n=>n.name==='Article photo')).length;
   const scene=scenes[selected]||scenes[0];const card=selected>0&&selected<scenes.length-1?project?.draft.cards[selected-1]:null;
   useEffect(()=>{
     if(!project)return;if(loaded.current===project){loaded.current=null;return;}
@@ -37,7 +41,7 @@ function App(){
     const current=makeScenes(p,p.photos,p.coverVariant||0,measure);
     return p.draft.cards.map((c,i)=>{
       const page=current[i+1],src=page.nodes.find(n=>n.name==='Article photo')?.src;
-      return {...c,layoutOverride:page.layout,templateOverride:page.templateFile,photoAssigned:true,photoId:p.photos.find(photo=>photo.gray===src)?.id||null};
+      return {...c,layoutOverride:page.layout,templateOverride:page.templateFile,photoAssigned:true,photoId:src?p.photos.find(photo=>photo.original===src)?.id||null:null};
     });
   }
   useEffect(()=>{document.querySelector('.page-thumb.selected')?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});},[selected,project?.draft.cards]);
@@ -63,7 +67,7 @@ function App(){
   function addPage(){
     if(!project||busy||exporting||project.draft.cards.length>=30)return;
     const cards=pinPages(project);
-    cards.push({id:crypto.randomUUID(),title:'새 페이지 제목',body:'',layout:'photo-overlay',layoutOverride:'photo-overlay',templateOverride:'#2.jpg',photoAssigned:true,photoId:bodyPhotos[cards.length]?.id||null,addedByUser:true});
+    cards.push({id:crypto.randomUUID(),title:'새 페이지 제목',body:'',layout:'photo-overlay',layoutOverride:'photo-overlay',templateOverride:'#2.jpg',photoAssigned:true,photoId:null,addedByUser:true});
     setProject(p=>({...p,draft:{...p.draft,cards}}));setSelected(cards.length);setVariants(false);setTemplateCardId(cards.at(-1).id);
     setNotice('본문 페이지를 추가했습니다. 오른쪽에서 템플릿과 내용을 선택하세요.');
   }
@@ -78,7 +82,7 @@ function App(){
     setProject(p=>({...p,draft:{...p.draft,cards:p.draft.cards.map((c,i)=>i===selected-1?{...c,layoutOverride:layout,templateOverride:file}:c)}}));setTemplateCardId(null);
   }
   async function watch(id,label){
-    for(;;){const state=await api(`/api/jobs/${id}`);setBusy({label,message:state.message});if(state.status==='failed')throw new Error(state.error);if(state.status==='complete')return state.result;await new Promise(r=>setTimeout(r,1500));}
+    for(;;){const state=await api(`/api/jobs/${id}`);setBusy({label,message:state.message});if(state.status==='failed')throw new Error(state.error);if(state.status==='complete')return state.result;await new Promise(r=>setTimeout(r,label.includes('사진')?250:1500));}
   }
   async function addPhotos(files,role='cover'){
     if(!files.length||busy)return;
@@ -90,22 +94,46 @@ function App(){
       const {jobId}=await api('/api/photos',{method:'POST',body:form});const prepared=await watch(jobId,'사진 준비');
       const next=role==='cover'?[prepared[0],...bodyPhotos.map(p=>({...p,role:'body'}))]:[...(coverPhoto?[{...coverPhoto,role:'cover'}]:[]),...prepared];
       const roles=photoRoles(null,next);setPhotos(next);
-      if(project)setProject(p=>({...p,photos:next,coverPhotoId:roles.cover?.id||null,draft:{...p.draft,cards:p.draft.cards.map((c,i)=>({...c,photoId:roles.body[i]?.id||null}))}}));
+      if(project)setProject(p=>({...p,photos:next,coverPhotoId:roles.cover?.id||null,draft:{...p.draft,cards:pinPages(p).map((c,i)=>role==='body'?{...c,photoAssigned:true,photoId:roles.body[i]?.id||null,photoPosition:{x:0,y:0,zoom:1}}:c)}}));
       setNotice(role==='cover'?'표지 사진을 교체했습니다.':`본문 사진 ${prepared.length}장을 2페이지부터 순서대로 배치했습니다.`);
     }catch(e){setError(e.message);}finally{setBusy(null);if(photoInput.current)photoInput.current.value='';if(bodyPhotoInput.current)bodyPhotoInput.current.value='';}
   }
-  async function replacePagePhoto(file){
-    if(!file||!card||busy)return;
-    const targetId=card.id;setError('');setBusy({label:'본문 사진 교체',message:'사진을 준비하고 있습니다'});
+  async function replacePagePhoto(file,targetId=card?.id){
+    if(!file||!project?.draft.cards.some(c=>c.id===targetId)||busy||exporting)return;
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setError('JPG, PNG, WebP 사진을 선택하세요.');return;}
+    if(file.size>15*1024*1024){setError('사진당 15MB 이하로 선택하세요.');return;}
+    const previewUrl=URL.createObjectURL(file);
+    setPhotoPreview({cardId:targetId,photo:{id:'preview',role:'body',original:previewUrl}});
+    setSelected(project.draft.cards.findIndex(c=>c.id===targetId)+1);setVariants(false);
+    setError('');setBusy({label:'본문 사진 교체',message:'사진을 준비하고 있습니다'});
     try{
       const form=new FormData();form.append('role','body');form.append('provider',project?.provider||provider);form.append('photos',file);
       const {jobId}=await api('/api/photos',{method:'POST',body:form});const [photo]=await watch(jobId,'본문 사진 교체');
       const cards=pinPages(project);const oldId=cards.find(c=>c.id===targetId)?.photoId;
       const unused=oldId&&!cards.some(c=>c.id!==targetId&&c.photoId===oldId);
       const next=[...photos.filter(p=>!unused||p.id!==oldId),photo];
-      setPhotos(next);setProject(p=>({...p,photos:next,draft:{...p.draft,cards:cards.map(c=>c.id===targetId?{...c,photoId:photo.id,photoAssigned:true,photoPosition:{x:0,y:0,zoom:1}}:c)}}));
+      setPhotos(next);setProject(p=>({...p,photos:next,draft:{...p.draft,cards:pinPages(p).map(c=>c.id===targetId?{...c,photoId:photo.id,photoAssigned:true,photoPosition:{x:0,y:0,zoom:1}}:c)}}));
       setNotice('선택한 본문 페이지의 사진을 교체했습니다.');
-    }catch(e){setError(e.message);}finally{setBusy(null);if(pagePhotoInput.current)pagePhotoInput.current.value='';}
+    }catch(e){setError(e.message);}finally{setPhotoPreview(null);URL.revokeObjectURL(previewUrl);setBusy(null);if(pagePhotoInput.current)pagePhotoInput.current.value='';}
+  }
+  function photoDragOver(e,targetId){
+    if(!targetId||busy||exporting)return;
+    if([...e.dataTransfer.types].some(type=>type==='Files'||type==='application/x-done-photo')){
+      e.preventDefault();e.dataTransfer.dropEffect='copy';setDropTarget(targetId);
+    }
+  }
+  function photoDrop(e,targetId){
+    e.preventDefault();e.stopPropagation();setDropTarget(null);
+    if(!targetId||busy||exporting)return;
+    const files=[...e.dataTransfer.files];
+    if(files.length){
+      if(files.length!==1){setError('페이지마다 사진 한 장을 놓아 주세요.');return;}
+      replacePagePhoto(files[0],targetId);return;
+    }
+    const photo=bodyPhotos.find(p=>p.id===e.dataTransfer.getData('application/x-done-photo'));
+    if(!photo)return;
+    setProject(p=>({...p,draft:{...p.draft,cards:pinPages(p).map(c=>c.id===targetId?{...c,photoAssigned:true,photoId:photo.id,photoPosition:{x:0,y:0,zoom:1}}:c)}}));
+    setSelected(project.draft.cards.findIndex(c=>c.id===targetId)+1);setVariants(false);
   }
   const position=selected===0?project?.coverPhotoPosition||{}:card?.photoPosition||{};
   const positionedPhoto=scene?.nodes.some(n=>n.name==='Article photo'||n.name==='Original cover photo'||n.name==='Blue photographic background');
@@ -116,7 +144,7 @@ function App(){
   function photoControls(){return positionedPhoto&&<div className="photo-position"><span className="field-caption">사진 위치</span><label>좌우 <input aria-label="사진 좌우 위치" type="range" min="-100" max="100" value={position.x||0} onChange={e=>setPhotoPosition({x:Number(e.target.value)})} disabled={!!busy}/></label><label>상하 <input aria-label="사진 상하 위치" type="range" min="-100" max="100" value={position.y||0} onChange={e=>setPhotoPosition({y:Number(e.target.value)})} disabled={!!busy}/></label><label>확대 <input aria-label="사진 확대" type="range" min="1" max="2" step="0.01" value={position.zoom||1} onChange={e=>setPhotoPosition({zoom:Number(e.target.value)})} disabled={!!busy}/><small>{Math.round((position.zoom||1)*100)}%</small></label><button className="text-button" onClick={()=>setPhotoPosition({x:0,y:0,zoom:1})} disabled={!!busy}><RefreshCw size={12}/>위치 초기화</button><p className="hint">여유가 없는 방향은 조금 확대한 뒤 이동하세요.</p></div>;}
   async function generate(){
     setError('');setBusy({label:'매거진 생성',message:'원고 작성을 준비하고 있습니다'});
-    try{const {jobId}=await api('/api/generate',json({url,angle,transcript:manual?transcript:'',title:sourceTitle,photos,coverPhotoId:coverPhoto?.id||null,coverStyle:project?.coverStyle||coverStyle,provider}));const p=await watch(jobId,'매거진 생성');loaded.current=p;setProject(p);setProvider(p.provider||provider);setSelected(0);setVariants(false);setSaved('저장됨');setNotice(`${p.draft.cards.length+2}장의 매거진 초안을 만들었습니다.`);}
+    try{const {jobId}=await api('/api/generate',json({url,angle,transcript:manual?transcript:'',title:sourceTitle,photos,coverPhotoId:coverPhoto?.id||null,coverStyle:project?.coverStyle||coverStyle,provider}));const p=await watch(jobId,'매거진 생성');loaded.current=p;setProject(p);setPhotos(p.photos);setProvider(p.provider||provider);setSelected(0);setVariants(false);setSaved('저장됨');setNotice(`${p.draft.cards.length+2}장의 초안을 만들었습니다. 본문에 사진을 드래그해 넣으세요.`);}
     catch(e){setError(e.message);if(e.message.includes('자막'))setManual(true);}finally{setBusy(null);}
   }
   async function createCaption(){
@@ -188,26 +216,26 @@ function App(){
         <button className="upload-zone" onClick={()=>photoInput.current.click()} disabled={!!busy} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();addPhotos([...e.dataTransfer.files],'cover');}}><Plus size={22}/><strong>{coverPhoto?'표지 사진 교체':'표지 사진 1장 선택'}</strong><span>썸네일 표지 전용 · JPG · PNG · WebP</span></button>
         <input ref={photoInput} type="file" hidden accept="image/jpeg,image/png,image/webp" onChange={e=>addPhotos([...e.target.files],'cover')}/>
         {coverPhoto&&<div className="photo-grid"><button className="selected" title={coverPhoto.name} onClick={()=>setSelected(0)}><img src={coverPhoto.original} alt={coverPhoto.name}/><span>표지</span></button></div>}
-        <p className="hint">{(project?.coverStyle||coverStyle)==='original'?'원본 색상을 그대로 사용합니다. 제목과 로고는 유지됩니다.':'흑백 피사체 · 파랑 배경 · 주변 요소의 주황색'}</p>
+        <p className="hint">{(project?.coverStyle||coverStyle)==='original'?'원본 색상에 노이즈 질감을 더합니다. 제목과 로고는 유지됩니다.':'흑백 피사체 · 파랑 배경 · 주변 요소의 주황색'}</p>
         {coverPhoto&&(project?.coverStyle||coverStyle)!=='original'&&<button className="text-button" onClick={restylePhotos} disabled={!!busy}><RefreshCw size={13}/>표지 다시 디자인</button>}
         <div className="section-rule"/><div className="photo-heading"><span className="eyebrow">03 / BODY PHOTOS</span><span>{bodyPhotos.length}/16</span></div>
-        <button className="upload-zone" onClick={()=>bodyPhotoInput.current.click()} disabled={!!busy} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();addPhotos([...e.dataTransfer.files],'body');}}><Plus size={22}/><strong>{bodyPhotos.length?'본문 사진 일괄 교체':'본문 사진 여러 장 선택'}</strong><span>선택 순서대로 2페이지부터 연속 배치</span></button>
+        <button className="upload-zone" onClick={()=>bodyPhotoInput.current.click()} disabled={!!busy||!project} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();addPhotos([...e.dataTransfer.files],'body');}}><Plus size={22}/><strong>{bodyPhotos.length?'본문 사진 일괄 교체':'본문 사진 여러 장 선택'}</strong><span>{project?'선택 순서대로 2페이지부터 연속 배치':'초안 생성 후 사진을 넣어 주세요'}</span></button>
         <input ref={bodyPhotoInput} type="file" hidden multiple accept="image/jpeg,image/png,image/webp" onChange={e=>addPhotos([...e.target.files],'body')}/>
-        {!!bodyPhotos.length&&<div className="photo-grid">{bodyPhotos.map((p,i)=><button key={p.id} title={`${i+2}페이지 · ${p.name}`} onClick={()=>{if(project&&i<project.draft.cards.length)setSelected(i+1);}}><img src={p.original} alt={p.name}/><span>{i+2}페이지</span></button>)}</div>}
-        <p className="hint">사진 영역을 빈 여백 없이 최소 확대합니다. 마지막 페이지는 #7 템플릿을 유지합니다.</p>
-        {project&&bodyPhotos.length<project.draft.cards.length&&<p className="hint">본문 {project.draft.cards.length}장 중 {bodyPhotos.length}장에 사진이 있습니다. 나머지 페이지에 사용할 사진을 함께 선택해 주세요.</p>}
+        {!!bodyPhotos.length&&<div className="photo-grid">{bodyPhotos.map((p,i)=><button key={p.id} draggable={!busy&&!exporting} onDragStart={e=>{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('application/x-done-photo',p.id);}} title={`드래그하여 본문에 삽입 · ${p.name}`} onClick={()=>{const index=project?.draft.cards.findIndex(c=>c.photoId===p.id);if(index>=0)setSelected(index+1);}}><img src={p.original} alt={p.name}/><span>{project?.draft.cards.findIndex(c=>c.photoId===p.id)>=0?`${project.draft.cards.findIndex(c=>c.photoId===p.id)+2}페이지`:'미배치'}</span></button>)}</div>}
+        <p className="hint">본문은 텍스트만 생성됩니다. 사진 파일이나 위 사진을 본문 미리보기·썸네일에 놓으면 컬러와 노이즈가 적용됩니다.</p>
+        {project&&assignedPhotoCount<project.draft.cards.length&&<p className="hint">본문 {project.draft.cards.length}장 중 {assignedPhotoCount}장에 사진이 있습니다. 사진이 없는 페이지에 직접 드래그해 넣어 주세요.</p>}
         <div className="generate-area"><button className="primary generate" onClick={generate} disabled={!!busy||(!url.trim()&&!(manual&&transcript.trim()))}>{busy?<LoaderCircle className="spin" size={17}/>:<ArrowRight size={17}/>} {busy?busy.label:'매거진 초안 생성'}</button><div className="cli-status"><span className={status?.loggedIn?'online':'offline'}/>{status?status.loggedIn?'Codex CLI 연결됨':'Codex CLI 로그인 필요':'Codex CLI 확인 중'}</div></div>
       </aside>
       <main className="canvas-panel"><div className="canvas-toolbar"><div><span className="eyebrow">{project?'MAGAZINE DRAFT':'TEMPLATE PREVIEW'}</span><h1>{project?selected===0?'표지':selected===scenes.length-1?'엔딩':`본문 ${selected}`:'D.one 에디토리얼'}</h1></div><div className="canvas-tools">{project&&selected===0&&<button className={`quiet ${variants?'chosen':''}`} onClick={()=>setVariants(v=>!v)}><Layers size={15}/>표지 후보</button>}<span className="dimension">1080 × 1350</span></div></div>
         {error&&<div className="error-banner" role="alert"><span>{error}</span><button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
         <div className={`canvas-stage ${busy?'processing':''}`}>
-          {!project?<div className="reference-poster"><img src="/references/selective-color.png" alt="표지 스타일 참조: 사진 요소 선택 착색과 인쇄 질감"/><div className="reference-caption"><span>STYLE REFERENCE</span><span>사진과 영상으로 새 초안을 만드세요</span></div></div>:variants&&selected===0?<div className="variant-grid">{[0,1,2].map(v=><button key={v} className={`variant ${project.coverVariant===v?'selected':''}`} onClick={()=>{setProject(p=>({...p,coverVariant:v}));setVariants(false);}}><div dangerouslySetInnerHTML={{__html:sceneSvg(makeScenes(project,project.photos,v,measure)[0])}}/><span>구도 {String(v+1).padStart(2,'0')}{project.coverVariant===v&&<Check size={14}/>}</span></button>)}</div>:<div className="poster" aria-label="매거진 미리보기" dangerouslySetInnerHTML={{__html:sceneSvg(scene)}}/>}
+          {!project?<div className="reference-poster"><img src="/references/selective-color.png" alt="표지 스타일 참조: 사진 요소 선택 착색과 인쇄 질감"/><div className="reference-caption"><span>STYLE REFERENCE</span><span>사진과 영상으로 새 초안을 만드세요</span></div></div>:variants&&selected===0?<div className="variant-grid">{[0,1,2].map(v=><button key={v} className={`variant ${project.coverVariant===v?'selected':''}`} onClick={()=>{setProject(p=>({...p,coverVariant:v}));setVariants(false);}}><div dangerouslySetInnerHTML={{__html:sceneSvg(makeScenes(project,project.photos,v,measure)[0])}}/><span>구도 {String(v+1).padStart(2,'0')}{project.coverVariant===v&&<Check size={14}/>}</span></button>)}</div>:<div className={`poster ${dropTarget===card?.id&&card?'photo-drop-active':''}`} aria-label="매거진 미리보기" onDragOver={e=>photoDragOver(e,card?.id)} onDragLeave={()=>setDropTarget(null)} onDrop={e=>photoDrop(e,card?.id)}><div className="poster-art" dangerouslySetInnerHTML={{__html:sceneSvg(scene)}}/>{card&&!busy&&<span className="photo-drop-hint">{dropTarget===card.id?'놓으면 이 페이지에 삽입됩니다':'사진을 여기에 드래그해 '+(positionedPhoto?'교체':'넣으세요')}</span>}</div>}
           {project&&!variants&&<><button className="page-nav prev" aria-label="이전 페이지" title="이전 페이지 (←)" disabled={selected===0} onClick={()=>goToPage(selected-1)}><ChevronLeft size={22}/></button><button className="page-nav next" aria-label="다음 페이지" title="다음 페이지 (→)" disabled={selected===scenes.length-1} onClick={()=>goToPage(selected+1)}><ChevronRight size={22}/></button></>}
-          {busy&&<div className="progress-overlay" role="status"><LoaderCircle size={28} className="spin"/><strong>{busy.label}</strong><p>{busy.message}</p><span>이 창을 열어 둔 채 기다려 주세요.</span></div>}
+          {busy&&!photoPreview&&<div className="progress-overlay" role="status"><LoaderCircle size={28} className="spin"/><strong>{busy.label}</strong><p>{busy.message}</p><span>이 창을 열어 둔 채 기다려 주세요.</span></div>}
         </div>
         {project?<div className="filmstrip">{scenes.map((s,i)=>{
           const movable=i>0&&i<scenes.length-1,canDelete=!busy&&!exporting&&project.draft.cards.length>1;
-          const thumb=<button key={s.id} className={`page-thumb ${selected===i?'selected':''} ${dragged===s.id?'dragging':''}`} draggable={movable&&!busy&&!exporting} aria-label={`${i+1}페이지 ${movable?'본문, 드래그하여 순서 이동':s.kind==='cover'?'표지':'엔딩'}`} onDragStart={e=>{setDragged(s.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',s.id);}} onDragEnd={()=>setDragged(null)} onDragOver={e=>{if(movable&&dragged){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{e.preventDefault();if(movable)movePage(e.dataTransfer.getData('text/plain'),i-1);}} onKeyDown={e=>{if(movable&&e.altKey&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();movePage(s.id,i-1+(e.key==='ArrowRight'?1:-1));}if(movable&&canDelete&&['Delete','Backspace'].includes(e.key)){e.preventDefault();removePage(s.id);}}} onClick={()=>{setSelected(i);setVariants(false);}}><div dangerouslySetInnerHTML={{__html:sceneSvg(s)}}/><span>{String(i+1).padStart(2,'0')} <small>{i===0?'표지':i===scenes.length-1?'엔딩':'본문'}</small></span></button>;
+          const thumb=<button key={s.id} className={`page-thumb ${selected===i?'selected':''} ${dragged===s.id?'dragging':''} ${dropTarget===s.id?'photo-drop-active':''}`} draggable={movable&&!busy&&!exporting} aria-label={`${i+1}페이지 ${movable?'본문, 드래그하여 순서 이동':s.kind==='cover'?'표지':'엔딩'}`} onDragStart={e=>{setDragged(s.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',s.id);}} onDragEnd={()=>setDragged(null)} onDragOver={e=>{if(movable)photoDragOver(e,s.id);if(movable&&dragged){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDragLeave={()=>setDropTarget(null)} onDrop={e=>{if(movable&&([...e.dataTransfer.types].includes('Files')||[...e.dataTransfer.types].includes('application/x-done-photo'))){photoDrop(e,s.id);return;}e.preventDefault();if(movable)movePage(e.dataTransfer.getData('text/plain'),i-1);}} onKeyDown={e=>{if(movable&&e.altKey&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();movePage(s.id,i-1+(e.key==='ArrowRight'?1:-1));}if(movable&&canDelete&&['Delete','Backspace'].includes(e.key)){e.preventDefault();removePage(s.id);}}} onClick={()=>{setSelected(i);setVariants(false);}}><div dangerouslySetInnerHTML={{__html:sceneSvg(s)}}/><span>{String(i+1).padStart(2,'0')} <small>{i===0?'표지':i===scenes.length-1?'엔딩':'본문'}</small></span></button>;
           if(!movable)return thumb;
           return <div key={s.id} className="page-slot">{thumb}<button className="page-delete" aria-label={`${i+1}페이지 삭제`} title={canDelete?'페이지 삭제':'본문 페이지는 최소 1장이 필요합니다'} disabled={!canDelete} onClick={()=>removePage(s.id)}><Trash2 size={11}/></button><div className="page-move"><button aria-label={`${i+1}페이지를 앞으로 한 칸 이동`} title="앞으로 한 칸 (Alt+←)" disabled={!!busy||exporting||i===1} onClick={()=>movePage(s.id,i-2)}><ChevronLeft size={12}/></button><button aria-label={`${i+1}페이지를 뒤로 한 칸 이동`} title="뒤로 한 칸 (Alt+→)" disabled={!!busy||exporting||i===scenes.length-2} onClick={()=>movePage(s.id,i)}><ChevronRight size={12}/></button></div></div>;
         })}<button className="add-page" aria-label="본문 페이지 추가" onClick={addPage} disabled={!!busy||exporting||project.draft.cards.length>=30}><Plus size={28}/><span>본문 페이지 추가</span></button></div>:<div className="empty-strip"><span>표지</span><ArrowRight size={14}/><span>내용에 맞는 본문</span><ArrowRight size={14}/><span>D.one 엔딩</span></div>}
@@ -215,7 +243,7 @@ function App(){
       </main>
       <aside className="editor-panel"><div className="panel-head"><span className="eyebrow">03 / EDITOR</span><h2>{project?'텍스트 편집':'편집 준비'}</h2></div>
         {!project?<div className="editor-empty"><FileText size={30} strokeWidth={1}/><p>초안을 생성하면<br/>제목과 본문을 수정할 수 있습니다.</p><div className="style-notes"><span>표지 스타일</span><div className="swatches"><i style={{background:'#ff660f'}}/><i style={{background:'#1712ff'}}/><i style={{background:'#0a0a0a'}}/><i style={{background:'#edeae3'}}/></div><p>흑백 피사체 · 파랑 배경<br/>주변 요소의 주황색 · 잉크와 종이 결</p></div></div>:<>
-          {(selected===0||card)&&<>{card&&<><button className="export-button" onClick={()=>pagePhotoInput.current.click()} disabled={!!busy||exporting}><ImageIcon size={16}/>이 페이지 사진 교체</button><input ref={pagePhotoInput} type="file" hidden accept="image/jpeg,image/png,image/webp" onChange={e=>replacePagePhoto(e.target.files[0])}/></>}{photoControls()}</>}
+          {(selected===0||card)&&<>{card&&<><button className="export-button" onClick={()=>pagePhotoInput.current.click()} disabled={!!busy||exporting}><ImageIcon size={16}/>{positionedPhoto?'이 페이지 사진 교체':'이 페이지에 사진 추가'}</button><input ref={pagePhotoInput} type="file" hidden accept="image/jpeg,image/png,image/webp" onChange={e=>replacePagePhoto(e.target.files[0])}/></>}{photoControls()}</>}
           {selected===0?<><label className="field"><span>표지 제목</span><textarea aria-label="표지 제목" className="title-edit" value={project.draft.title} onChange={e=>updateDraft('title',e.target.value)} maxLength={120}/><p className="hint">줄바꿈을 넣어 제목의 호흡을 조정하세요.</p></label>{!!project.draft.coverTitles?.length&&<div className="title-suggestions"><span className="field-caption">제목 후보</span>{project.draft.coverTitles.map((t,i)=><button key={i} onClick={()=>updateDraft('title',t)}>{t}<ArrowUpRight size={13}/></button>)}</div>}<div className="article-angle"><span className="eyebrow">기사의 중심</span><p>{project.draft.angle}</p></div></>:card?<><div className="layout-label"><ImageIcon size={14}/>{scene.templateFile} · {pageNames[scene.layout]}<button className="template-edit" aria-expanded={templateCardId===card.id} disabled={!!busy||exporting} onClick={()=>setTemplateCardId(id=>id===card.id?null:card.id)}>{templateCardId===card.id?'닫기':'템플릿 수정하기'}</button></div>{templateCardId===card.id&&<div className="template-picker"><span className="field-caption">페이지 템플릿</span>{TEMPLATE_CHOICES.map(([layout,file,label])=><button key={layout} className={scene.layout===layout?'selected':''} aria-pressed={scene.layout===layout} onClick={()=>chooseLayout(layout,file)}><ImageIcon size={14}/>{label}</button>)}</div>}<label className="field"><span>제목</span><textarea aria-label="본문 제목" className="title-edit" value={card.title} onChange={e=>updateCard('title',e.target.value)} maxLength={160}/></label><label className="field"><span>본문 <small>{card.body.length}자</small></span><textarea aria-label="본문" className="body-edit" value={card.body} onChange={e=>updateCard('body',e.target.value)} maxLength={2000}/></label></>:<div className="article-angle"><span className="eyebrow">ENDING TEMPLATE</span><p>#7.jpg 원본 템플릿을 그대로 사용합니다.</p></div>}
           {scene?.nodes.some(n=>n.overflow)&&<p className="overflow-warning">텍스트가 페이지 영역을 넘습니다. 내용을 줄여 주세요.</p>}
         </>}

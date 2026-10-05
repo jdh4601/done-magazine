@@ -7,7 +7,7 @@ test('Old emphasis never creates underline nodes',()=>{
   assert.ok(!scenes[1].nodes.some(n=>n.name==='Emphasis underline'));
 });
 test('Explicit page template and photo survive reordering with a fixed ending',()=>{
-  const photos=[{id:'cover',role:'cover',gray:'cover',subject:'subject'}, {id:'a',role:'body',gray:'a.png'}, {id:'b',role:'body',gray:'b.png'}];
+  const photos=[{id:'cover',role:'cover',gray:'cover',subject:'subject'}, {id:'a',role:'body',original:'a.png',gray:'a-gray.png'}, {id:'b',role:'body',original:'b.png',gray:'b-gray.png'}];
   const a={id:'a',title:'첫 페이지',body:'본문',layoutOverride:'dark-top',templateOverride:'#3.jpg',photoAssigned:true,photoId:'a'};
   const b={id:'b',title:'둘째 페이지',body:'본문',layoutOverride:'dark-bottom',templateOverride:'#4.jpg',photoAssigned:true,photoId:'b'};
   const scenes=makeScenes({coverPhotoId:'cover',draft:{title:'표지',cards:[b,a,{id:'new',title:'새 페이지',body:'',layoutOverride:'photo-overlay',templateOverride:'#2.jpg',photoAssigned:true,photoId:null}]}},photos);

@@ -1,4 +1,8 @@
 // Returns the cards without `id` and the scene index to select next (cover is scene 0).
+export function textOnlyCards(cards) {
+  return cards.map(card=>({...card,photoAssigned:true,photoId:null,photoPosition:{x:0,y:0,zoom:1}}));
+}
+
 // The magazine needs at least one body page between the cover and the ending.
 export function deletePage(cards,id) {
   const index=cards.findIndex(c=>c.id===id);
