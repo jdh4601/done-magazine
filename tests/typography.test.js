@@ -39,3 +39,11 @@ test('Cover always has the bottom black gradient with Figma stops 0%→62%',()=>
     assert.match(svg,/<stop offset="0" stop-color="#000" stop-opacity="0"\/><stop offset="0.62" stop-color="#000" stop-opacity="1"\/>/);
   }
 });
+test('D.one logo is drawn as a Playfair Bold vector path so PNG export never falls back to sans-serif',()=>{
+  const scenes=makeScenes({...project(1),coverStyle:'original'});
+  for(const scene of scenes.slice(0,2)){
+    const svg=sceneSvg(scene);
+    assert.ok(!/<text[^>]*>(<tspan[^>]*>)?D\.one</.test(svg),`${scene.id} still renders the logo as font text`);
+    assert.match(svg,/<path d="M[^"]+" fill="#[0-9A-Fa-f]{3,6}" transform="translate\([\d.]+ [\d.]+\) scale\([\d.]+\)" aria-label="D\.one"\/>/);
+  }
+});
