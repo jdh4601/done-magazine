@@ -1,0 +1,96 @@
+export const WIDTH=1080, HEIGHT=1350;
+const INK='#0A0A0A', PAPER='#EDEAE3', ORANGE='#FF660F', BLUE='#1712FF';
+const DEFAULT_MEASURE=(text,size)=>Array.from(text).reduce((sum,c)=>sum+(/\s/.test(c)?0.3:/[\u0000-\u007f]/.test(c)?0.54:1)*size,0);
+export function wrapText(value,width,size,measure=DEFAULT_MEASURE) {
+  const result=[];
+  for(const paragraph of String(value || '').split('\n')) {
+    if(!paragraph) {result.push('');continue;}
+    let line='';
+    for(const char of Array.from(paragraph)) {
+      if(line && measure(line+char,size)>width) {
+        const breakAt=line.lastIndexOf(' ');
+        if(breakAt>line.length*0.35) { result.push(line.slice(0,breakAt));line=line.slice(breakAt+1)+char; }
+        else {result.push(line);line=char.trimStart();}
+      } else line+=char;
+    }
+    result.push(line.trimEnd());
+  }
+  return result;
+}
+function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,font='Noto Sans KR') {
+  let lines, lineHeight;
+  do {lines=wrapText(value,width,size,measure?(v,s)=>measure(v,s,weight,font):undefined);lineHeight=Math.round(size*1.45);if(lines.length*lineHeight<=maxHeight)break;size-=1;} while(size>=22);
+  return {type:'text',name,text:lines.join('\n'),x,y,width,height:lines.length*lineHeight+8,fontSize:size,lineHeight,color,fontFamily:font,fontWeight:weight,overflow:lines.length*lineHeight>maxHeight};
+}
+const rect=(name,x,y,width,height,fill,extra={})=>({type:'rect',name,x,y,width,height,fill,...extra});
+const img=(name,photo,x,y,width,height)=>({type:'image',name,src:photo,x,y,width,height});
+function brand(nodes,color= '#fff') {nodes.push(text('D.one','D.one',80,46,350,36,color,700,undefined,100,'Editorial Serif'));}
+function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));nodes.push(text('Magazine','MAGAZINE',865,1280,135,12,color,400));}
+
+export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) {
+  if(!project?.draft)return [];
+  const scenes=[]; const {draft}=project;
+  const asset=assets.find(a=>a.id===project.coverPhotoId)||assets[0];
+  const layoutVariants=[{circle:[340,200,860,860],subject:[230,300,670,700],stripe:[-80,150,510,90,-17]},{circle:[-90,260,900,900],subject:[280,250,660,770],stripe:[740,80,440,85,22]},{circle:[300,310,860,860],subject:[80,230,740,790],stripe:[-80,130,450,90,-13]}];
+  const variantLayout=layoutVariants[variant%3];
+  const coverNodes=[rect('Background',0,0,WIDTH,HEIGHT,INK)];
+  if(asset) {coverNodes.push(img('Background photo',asset.gray,0,0,WIDTH,HEIGHT));coverNodes.push(rect('Blue multiply',0,0,WIDTH,HEIGHT,BLUE,{blend:'multiply'}));}
+  const [cx,cy,cw,ch]=variantLayout.circle;
+  coverNodes.push({type:'ellipse',name:'Orange circle',x:cx,y:cy,width:cw,height:ch,fill:ORANGE});
+  const [sx,sy,sw,sh,sr]=variantLayout.stripe;
+  coverNodes.push(rect('Orange strip',sx,sy,sw,sh,ORANGE,{rotation:sr}));
+  if(asset) {
+    let [fx,fy,fw,fh]=variantLayout.subject;
+    const ratio=asset.subjectWidth/asset.subjectHeight;
+    if(fw/fh>ratio) {const newWidth=fh*ratio;fx+=(fw-newWidth)/2;fw=newWidth;} else {const newHeight=fw/ratio;fy+=fh-newHeight;fh=newHeight;}
+    coverNodes.push(img('Cutout subject',asset.subject,fx,fy,fw,fh));
+  }
+  coverNodes.push(rect('Title gradient',0,830,WIDTH,520,'gradient'));
+  coverNodes.push(img('Print grain','/assets/noise.png',0,0,WIDTH,HEIGHT));
+  brand(coverNodes);
+  coverNodes.push(text('Section label',draft.sectionLabel ?? 'FOUNDER’S NOTE',760,58,260,16,'#fff',400,measure,80));
+  const coverTitle=text('Cover title',draft.title,80,1030,920,78,'#fff',700,measure,350);
+  coverTitle.lineHeight=Math.round(coverTitle.fontSize*1.2);coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight+8;
+  coverTitle.y= Math.max(880,Math.min(1050,1290-coverTitle.height));
+  coverNodes.push(coverTitle);
+  scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
+  draft.cards.forEach((card,i)=>{
+    const photo=assets.find(a=>a.id===card.photoId)||assets[i%Math.max(assets.length,1)];
+    const paper=card.layout.startsWith('paper');const color=paper?INK:'#fff';
+    const nodes=[rect('Background',0,0,WIDTH,HEIGHT,paper?PAPER:INK)];
+    const overlay=card.layout==='photo-overlay';const top=card.layout.endsWith('top');
+    if(photo) nodes.push(img('Article photo',photo.gray,0,overlay?0:top?0:675,WIDTH,overlay?HEIGHT:675));
+    if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:0.76}));
+    let y=overlay?365:top?750:155;
+    const headline=text('Card title',card.title,80,y,920,52,color,700,measure,160);nodes.push(headline);
+    const bodyY=y+headline.height+60;
+    const body=text('Card body',card.body,80,bodyY,920,32,color,400,measure,Math.max(100,(overlay?1190:top?1225:645)-bodyY));nodes.push(body);
+    if(card.emphasis && body.text.replace(/\s/g,'').includes(card.emphasis.replace(/\s/g,''))) {
+      // Underlines are independent shapes; text remains editable in Figma.
+      const lines=body.text.split('\n');const needle=card.emphasis.replace(/\s/g,'');
+      let consumed=0;const compact=lines.map(l=>l.replace(/\s/g,'')).join('');const start=compact.indexOf(needle);const end=start+needle.length;
+      lines.forEach((l,j)=>{const compactLine=l.replace(/\s/g,'');const a=Math.max(0,start-consumed),b=Math.min(compactLine.length,end-consumed);if(start>=0&&a<b)nodes.push(rect('Emphasis underline',body.x,body.y+(j+1)*body.lineHeight-1,Math.min(body.width,measure(l,body.fontSize)),1.4,color));consumed+=compactLine.length;});
+    }
+    footer(nodes,overlay?'#fff':photo&&!top?paper?'#fff':'#fff':color);
+    scenes.push({id:card.id,name:`${String(i+2).padStart(2,'0')} · ${card.title}`,kind:'article',width:WIDTH,height:HEIGHT,nodes});
+  });
+  const end=[];end.push(rect('Background',0,0,WIDTH,HEIGHT,'#000'));
+  end.push(text('D.one',draft.endingTitle ?? 'D.one',320,550,650,150,'#fff',700,measure,250,'Editorial Serif'));
+  end.push(text('Tagline',draft.endingSubtitle ?? 'D o  o n e  a n d  D o n e',340,750,650,35,'#fff',400,measure,150,'Editorial Serif'));
+  scenes.push({id:'ending',name:`${String(scenes.length+1).padStart(2,'0')} · 엔딩`,kind:'ending',width:WIDTH,height:HEIGHT,nodes:end});
+  return scenes;
+}
+export function escapeXml(value) {return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));}
+export function sceneSvg(scene,resolveImage=s=>s) {
+  let content='';
+  for(const n of scene.nodes) {
+    const opacity=n.opacity??1; const rotation=n.rotation?` transform="rotate(${n.rotation} ${n.x} ${n.y})"`:'';
+    if(n.type==='rect'||n.type==='ellipse') {
+      const fill=n.fill==='gradient'?'url(#shade)':n.fill;
+      const attrs=`fill="${escapeXml(fill)}" opacity="${opacity}"${rotation}${n.blend?' style="mix-blend-mode:multiply"':''}`;
+      content+=n.type==='ellipse'?`<ellipse cx="${n.x+n.width/2}" cy="${n.y+n.height/2}" rx="${n.width/2}" ry="${n.height/2}" ${attrs}/>`:`<rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" ${attrs}/>`;
+    } else if(n.type==='image')content+=`<image href="${escapeXml(resolveImage(n.src))}" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" preserveAspectRatio="xMidYMid slice"/>`;
+    else if(n.type==='text') content+=`<text x="${n.x}" y="${n.y}" fill="${escapeXml(n.color)}" font-family="${n.fontFamily==='Editorial Serif'?'Playfair Display':escapeXml(n.fontFamily)}" font-size="${n.fontSize}" font-weight="${n.fontWeight}">${n.text.split('\n').map((l,i)=>`<tspan x="${n.x}" y="${n.y+n.fontSize+i*n.lineHeight}">${escapeXml(l)}</tspan>`).join('')}</text>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="0.5" stop-color="#000" stop-opacity="0.8"/><stop offset="1" stop-color="#000"/></linearGradient></defs>${content}</svg>`;
+}
