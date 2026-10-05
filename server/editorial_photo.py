@@ -1,7 +1,7 @@
 """Apply selective colour to real secondary objects, preserving source coordinates."""
 import json, sys
 import numpy as np
-from PIL import Image, ImageOps, ImageEnhance
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 from rembg import remove, new_session
 
 source, output_dir, plan_file = sys.argv[1:4]
@@ -28,16 +28,16 @@ subject_mask = object_mask(plan['subject'])
 if not subject_mask.getbbox():
     raise RuntimeError('주 피사체를 분리하지 못했습니다. 다른 사진을 사용하세요.')
 mono = ImageOps.grayscale(image)
-# Dry ink edges and four-bit halftone-like tonal steps, with readable highlights.
-subject_tone = ImageEnhance.Contrast(ImageOps.autocontrast(mono, cutoff=1)).enhance(1.65)
-subject_tone = ImageOps.posterize(subject_tone.convert('RGB'), 4)
+# Keep facial midtones; print texture belongs in its own overlay, not crushed skin.
+subject_tone = ImageEnhance.Contrast(mono).enhance(1.08)
+subject_tone = ImageEnhance.Brightness(subject_tone).enhance(1.04)
+subject_tone = subject_tone.filter(ImageFilter.UnsharpMask(radius=.7, percent=65, threshold=3)).convert('RGB')
 subject_tone.putalpha(subject_mask)
 subject_tone.save(output_dir+'/subject.png')
 
-# Protect the whole primary bounding box, not just the imperfect segmentation edge.
-protected = np.asarray(subject_mask, dtype=np.float32)/255
-sx, sy, ex, ey = bounds(plan['subject'])
-protected[sy:ey, sx:ex] = 1
+# Protect the silhouette and a small edge margin; the bounding rectangle may
+# contain real background objects such as a table beside the person's hands.
+protected = np.asarray(subject_mask.filter(ImageFilter.MaxFilter(9)), dtype=np.float32)/255
 accent_alpha = np.zeros((height,width), dtype=np.float32)
 for box in plan['accents']:
     mask = np.asarray(object_mask(box), dtype=np.float32)/255
@@ -50,6 +50,6 @@ accent = np.dstack([rgb,accent_alpha*255]).astype(np.uint8)
 Image.fromarray(accent,'RGBA').save(output_dir+'/accents.png')
 
 # A background duotone that preserves dark outlines without artificial colour planes.
-background = ImageEnhance.Contrast(ImageOps.autocontrast(mono, cutoff=1)).enhance(1.35)
-background = ImageOps.colorize(background, '#030415', '#1712FF')
+background = ImageOps.colorize(mono, '#1712FF', '#5550FF')
 background.save(output_dir+'/blue.png')
+print(json.dumps({'accentPixelCount':int(np.count_nonzero(accent[:,:,3]))}))

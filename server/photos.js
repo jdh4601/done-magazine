@@ -4,19 +4,33 @@ import sharp from 'sharp';
 import { run } from './process.js';
 import { analyzePhoto } from './codex.js';
 
-export async function processPhoto(file,root,id,progress) {
+export async function processPhoto(file,root,id,progress,role='cover',style='editorial',provider='codex') {
   const dir=path.join(root,'data','photos',id);await fs.mkdir(dir,{recursive:true});
   const normalized=path.join(dir,'original.png');
-  await sharp(file.buffer,{limitInputPixels:45000000}).rotate().resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).png().toFile(normalized);
+  await sharp(file.buffer,{limitInputPixels:45000000}).rotate().trim({background:'#ffffff',threshold:10}).resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).png().toFile(normalized);
   progress('흑백 대비와 사진 톤을 보정하고 있습니다');
   await sharp(normalized).grayscale().linear(1.55,-36).png().toFile(path.join(dir,'gray.png'));
+  if(role==='body'||style==='original'){
+    const meta=await sharp(normalized).metadata();
+    return {id,role,name:file.originalname,original:`/assets/photos/${id}/original.png`,gray:`/assets/photos/${id}/gray.png`,sourceWidth:meta.width,sourceHeight:meta.height};
+  }
   progress('Codex가 주 피사체와 강조할 주변 요소를 찾고 있습니다');
-  const plan=await analyzePhoto(normalized,dir);
+  const plan=await analyzePhoto(normalized,dir,provider);
   await fs.writeFile(path.join(dir,'plan.json'),JSON.stringify(plan));
   progress('피사체를 흑백으로 분리하고 주변 요소에 주황색을 입히고 있습니다');
-  await run(path.join(root,'.venv','bin','python'),[path.join(root,'server','editorial_photo.py'),normalized,dir,path.join(dir,'plan.json')],{timeout:240000, cwd:root});
+  const processing=JSON.parse(await run(path.join(root,'.venv','bin','python'),[path.join(root,'server','editorial_photo.py'),normalized,dir,path.join(dir,'plan.json')],{timeout:240000, cwd:root}));
   const meta=await sharp(path.join(dir,'subject.png')).metadata();
-  return {id,name:file.originalname,original:`/assets/photos/${id}/original.png`,gray:`/assets/photos/${id}/gray.png`,subject:`/assets/photos/${id}/subject.png`,blue:`/assets/photos/${id}/blue.png`,accents:`/assets/photos/${id}/accents.png`,accentLabels:plan.accents.map(a=>a.label),coverStyleVersion:2,subjectWidth:meta.width,subjectHeight:meta.height};
+  return {id,role,name:file.originalname,original:`/assets/photos/${id}/original.png`,gray:`/assets/photos/${id}/gray.png`,subject:`/assets/photos/${id}/subject.png`,blue:`/assets/photos/${id}/blue.png`,accents:`/assets/photos/${id}/accents.png`,accentLabels:processing.accentPixelCount?plan.accents.map(a=>a.label):[],accentPixelCount:processing.accentPixelCount,coverStyleVersion:3,sourceWidth:meta.width,sourceHeight:meta.height,subjectWidth:meta.width,subjectHeight:meta.height};
+}
+const contentCache=new Map();
+export async function withContentBounds(photo,root){
+  if(!contentCache.has(photo.id))contentCache.set(photo.id,(async()=>{
+    const file=path.join(root,'data','photos',photo.id,'original.png');
+    const meta=await sharp(file).metadata();
+    const {info}=await sharp(file).trim({background:'#ffffff',threshold:10}).png().toBuffer({resolveWithObject:true});
+    return {sourceWidth:meta.width,sourceHeight:meta.height,contentBounds:{x:-(info.trimOffsetLeft||0),y:-(info.trimOffsetTop||0),width:info.width,height:info.height}};
+  })().catch(()=>({})));
+  return {...photo,...await contentCache.get(photo.id)};
 }
 export async function ensureNoise(root) {
   const filename=path.join(root,'data','editorial-grain.png');

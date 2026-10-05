@@ -32,7 +32,10 @@ figma.ui.onmessage=async(message)=>{
           else if(n.fill==='gradient')node.fills=[{type:'GRADIENT_LINEAR',gradientTransform:[[0,1,0],[1,0,0]],gradientStops:[{position:0,color:{r:0,g:0,b:0,a:0}},{position:0.5,color:{r:0,g:0,b:0,a:0.8}},{position:1,color:{r:0,g:0,b:0,a:1}}]}];
           else node.fills=[{type:'SOLID',color:color(n.fill)}];
         }
-        frame.appendChild(node);node.name=n.name;node.x=n.x;node.y=n.y;node.opacity=n.opacity===undefined?1:n.opacity;if(n.blend)node.blendMode='MULTIPLY';if(n.rotation)node.rotation=-n.rotation;
+        if(n.clip){
+          const viewport=figma.createFrame();viewport.name=n.name+' crop';viewport.resize(n.clip.width,n.clip.height);viewport.clipsContent=true;viewport.fills=[];frame.appendChild(viewport);viewport.x=n.clip.x;viewport.y=n.clip.y;viewport.appendChild(node);node.x=n.x-n.clip.x;node.y=n.y-n.clip.y;
+        }else{frame.appendChild(node);node.x=n.x;node.y=n.y;}
+        node.name=n.name;node.opacity=n.opacity===undefined?1:n.opacity;if(n.blend)node.blendMode='MULTIPLY';if(n.rotation)node.rotation=-n.rotation;
       }
       figma.ui.postMessage({type:'progress',message:`${i+1}/${doc.scenes.length} 페이지 생성`});
     }

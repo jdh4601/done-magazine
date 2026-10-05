@@ -1,4 +1,5 @@
 import {bodyTemplate,ENDING_TEMPLATE,templateUrl} from './templates.js';
+import {photoRoles,coverFit} from './photos.js';
 export const WIDTH=1080, HEIGHT=1350;
 const INK='#0A0A0A', PAPER='#EDEAE3', BLUE='#1712FF';
 const DEFAULT_MEASURE=(text,size)=>Array.from(text).reduce((sum,c)=>sum+(/\s/.test(c)?0.3:/[\u0000-\u007f]/.test(c)?0.54:1)*size,0);
@@ -26,21 +27,24 @@ function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,
 const rect=(name,x,y,width,height,fill,extra={})=>({type:'rect',name,x,y,width,height,fill,...extra});
 const img=(name,photo,x,y,width,height)=>({type:'image',name,src:photo,x,y,width,height});
 function brand(nodes,color= '#fff') {nodes.push(text('D.one','D.one',848,74,152,36,color,700,undefined,100,'Editorial Serif'));}
-function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));nodes.push(text('Magazine','MAGAZINE',865,1280,135,12,color,400));}
+function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));}
 
 export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) {
   if(!project?.draft)return [];
   const scenes=[]; const {draft}=project;
-  const asset=assets.find(a=>a.id===project.coverPhotoId)||assets[0];
-  const cropVariants=[[0,0,1080,1350],[-75,-35,1188,1485],[-25,-90,1188,1485]];
+  const {cover:asset,body:bodyPhotos}=photoRoles(project,assets);
+  const base=coverFit(asset,WIDTH,HEIGHT,project.coverPhotoPosition);
+  const cropVariants=[base,...[1.06,1.1].map(scale=>[(base[0]-540)*scale+540,(base[1]-675)*scale+675,base[2]*scale,base[3]*scale])];
   const crop=cropVariants[variant%3];
   const coverNodes=[rect('Background',0,0,WIDTH,HEIGHT,INK)];
-  if(asset) {
+  const originalCover=project.coverStyle==='original';
+  if(asset&&originalCover)coverNodes.push(img('Original cover photo',asset.original,...crop));
+  if(asset&&!originalCover) {
     coverNodes.push(img('Blue photographic background',asset.blue||asset.gray,...crop));
     if(!asset.blue)coverNodes.push(rect('Blue multiply',...crop,BLUE,{blend:'multiply'}));
     if(asset.accents)coverNodes.push(img('Orange secondary objects',asset.accents,...crop));
   }
-  if(asset) {
+  if(asset&&!originalCover&&asset.subject) {
     let [fx,fy,fw,fh]=asset.coverStyleVersion>=2?crop:[190,180,700,850];
     if(!(asset.coverStyleVersion>=2)){
       const ratio=asset.subjectWidth/asset.subjectHeight;
@@ -48,8 +52,10 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
     }
     coverNodes.push(img('Cutout subject',asset.subject,fx,fy,fw,fh));
   }
-  coverNodes.push(rect('Title gradient',0,830,WIDTH,520,'gradient'));
-  coverNodes.push(img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT));
+  if(!originalCover){
+    coverNodes.push(rect('Title gradient',0,940,WIDTH,410,'gradient'));
+    coverNodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT),opacity:.45});
+  }
   brand(coverNodes);
   const coverTitle=text('Cover title',draft.title,80,1030,920,90,'#fff',800,measure,350);
   coverTitle.lineHeight=108;coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight;
@@ -58,25 +64,23 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
   coverNodes.push(coverTitle);
   scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
   draft.cards.forEach((card,i)=>{
-    const template=bodyTemplate(i),layout=template.layout;
-    const photo=assets.find(a=>a.id===card.photoId)||assets[i%Math.max(assets.length,1)];
+    const template=bodyTemplate(i),layout=card.layoutOverride||template.layout;
+    const photo=card.photoAssigned?bodyPhotos.find(a=>a.id===card.photoId):bodyPhotos.find(a=>a.id===card.photoId)||bodyPhotos[i];
     const paper=layout.startsWith('paper');const color=paper?INK:'#fff';
     const nodes=[rect('Background',0,0,WIDTH,HEIGHT,paper?PAPER:INK)];
     const overlay=layout==='photo-overlay';const top=layout.endsWith('top');
-    if(photo) nodes.push(img('Article photo',photo.gray,0,overlay?0:top?0:675,WIDTH,overlay?HEIGHT:675));
+    if(photo){
+      const slot={x:0,y:overlay?0:top?0:675,width:WIDTH,height:overlay?HEIGHT:675};
+      const [px,py,pw,ph]=coverFit(photo,slot.width,slot.height,card.photoPosition);
+      nodes.push({...img('Article photo',photo.gray,px,slot.y+py,pw,ph),clip:slot});
+    }
     if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:0.76}));
     let y=overlay?365:top?750:155;
     const headline=text('Card title',card.title,80,y,920,55,color,700,measure,160);nodes.push(headline);
     const bodyY=y+headline.height+64;
     const body=text('Card body',card.body,80,bodyY,920,30,color,400,measure,Math.max(0,(overlay?1190:top?1225:645)-bodyY));nodes.push(body);
-    if(card.emphasis && body.text.replace(/\s/g,'').includes(card.emphasis.replace(/\s/g,''))) {
-      // Underlines are independent shapes; text remains editable in Figma.
-      const lines=body.text.split('\n');const needle=card.emphasis.replace(/\s/g,'');
-      let consumed=0;const compact=lines.map(l=>l.replace(/\s/g,'')).join('');const start=compact.indexOf(needle);const end=start+needle.length;
-      lines.forEach((l,j)=>{const compactLine=l.replace(/\s/g,'');const a=Math.max(0,start-consumed),b=Math.min(compactLine.length,end-consumed);if(start>=0&&a<b)nodes.push(rect('Emphasis underline',body.x,body.y+(j+1)*body.lineHeight-1,Math.min(body.width,measure(l,body.fontSize)),1.4,color));consumed+=compactLine.length;});
-    }
     footer(nodes,overlay?'#fff':photo&&!top?paper?'#fff':'#fff':color);
-    scenes.push({id:card.id,name:`${String(i+2).padStart(2,'0')} · ${card.title}`,kind:'article',templateFile:template.file,layout,width:WIDTH,height:HEIGHT,nodes});
+    scenes.push({id:card.id,name:`${String(i+2).padStart(2,'0')} · ${card.title}`,kind:'article',templateFile:card.templateOverride||template.file,layout,width:WIDTH,height:HEIGHT,nodes});
   });
   const end=[img('Original ending template',templateUrl(ENDING_TEMPLATE),0,0,WIDTH,HEIGHT)];
   scenes.push({id:'ending',name:`${String(scenes.length+1).padStart(2,'0')} · 엔딩`,kind:'ending',templateFile:ENDING_TEMPLATE,width:WIDTH,height:HEIGHT,nodes:end});
@@ -85,13 +89,16 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
 export function escapeXml(value) {return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));}
 export function sceneSvg(scene,resolveImage=s=>s) {
   let content='';
-  for(const n of scene.nodes) {
+  for(const [index,n] of scene.nodes.entries()) {
     const opacity=n.opacity??1; const rotation=n.rotation?` transform="rotate(${n.rotation} ${n.x} ${n.y})"`:'';
     if(n.type==='rect'||n.type==='ellipse') {
       const fill=n.fill==='gradient'?'url(#shade)':n.fill;
       const attrs=`fill="${escapeXml(fill)}" opacity="${opacity}"${rotation}${n.blend?' style="mix-blend-mode:multiply"':''}`;
       content+=n.type==='ellipse'?`<ellipse cx="${n.x+n.width/2}" cy="${n.y+n.height/2}" rx="${n.width/2}" ry="${n.height/2}" ${attrs}/>`:`<rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" ${attrs}/>`;
-    } else if(n.type==='image')content+=`<image href="${escapeXml(resolveImage(n.src))}" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" preserveAspectRatio="xMidYMid slice"/>`;
+    } else if(n.type==='image'){
+      if(n.clip)content+=`<defs><clipPath id="photo-${index}"><rect x="${n.clip.x}" y="${n.clip.y}" width="${n.clip.width}" height="${n.clip.height}"/></clipPath></defs>`;
+      content+=`<image href="${escapeXml(resolveImage(n.src))}" x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" opacity="${opacity}"${n.clip?` clip-path="url(#photo-${index})"`:''} preserveAspectRatio="xMidYMid slice"/>`;
+    }
     else if(n.type==='text') content+=`<text x="${n.x}" y="${n.y}" fill="${escapeXml(n.color)}" font-family="${n.fontFamily==='Editorial Serif'?'Playfair Display':escapeXml(n.fontFamily)}" font-size="${n.fontSize}" font-weight="${n.fontWeight}">${n.text.split('\n').map((l,i)=>`<tspan x="${n.x}" y="${n.y+n.fontSize+i*n.lineHeight}">${escapeXml(l)}</tspan>`).join('')}</text>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="0.5" stop-color="#000" stop-opacity="0.8"/><stop offset="1" stop-color="#000"/></linearGradient></defs>${content}</svg>`;
