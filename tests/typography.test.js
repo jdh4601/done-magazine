@@ -52,17 +52,15 @@ test('D.one logo uses the official brand SVG path so PNG export never falls back
     assert.match(svg,/<path d="M[^"]+" fill="#[0-9A-Fa-f]{3,6}" transform="translate\([\d.]+ [\d.]+\) scale\([\d.]+\)" aria-label="D\.one"\/>/);
   }
 });
-test('Photo-bottom pages put the D.one logo, then the rule, at the top above the text',()=>{
+test('Photo-bottom pages put the D.one logo at the top with no rule',()=>{
   const p=project(1);
   for(const layout of ['dark-bottom','paper-bottom']){
     p.draft.cards[0].layoutOverride=layout;
     const nodes=makeScenes(p)[1].nodes,find=name=>nodes.find(n=>n.name===name);
-    const logo=find('D.one'),rule=find('Header line'),title=find('Card title');
-    assert.ok(logo&&rule,`${layout} is missing the header`);
-    assert.ok(!find('Footer line'),`${layout} still has the bottom footer`);
-    assert.equal(rule.y,126);assert.equal(title.y,174);
-    assert.ok(logo.y<rule.y&&rule.y<title.y);
-    assert.deepEqual([rule.x,rule.width,rule.height],[80,920,1]);
+    const logo=find('D.one'),title=find('Card title');
+    assert.ok(logo,`${layout} is missing the logo`);
+    assert.ok(!find('Header line')&&!find('Footer line'),`${layout} still draws a rule`);
+    assert.equal(logo.y,72);assert.equal(title.y,174);
   }
 });
 test('Photo-top and overlay pages keep the footer at the bottom',()=>{

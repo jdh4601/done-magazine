@@ -30,8 +30,8 @@ function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,
 const rect=(name,x,y,width,height,fill,extra={})=>({type:'rect',name,x,y,width,height,fill,...extra});
 const img=(name,photo,x,y,width,height)=>({type:'image',name,src:photo,x,y,width,height});
 function brand(nodes,color= '#fff') {nodes.push(text('D.one','D.one',848,74,152,36,color,700,undefined,100,'Editorial Serif'));}
-// Photo-bottom pages: logo cap top at 80px (matching the side margin), rule 28px below like the footer.
-function header(nodes,color) {nodes.push(text('D.one','D.one',80,72,200,26,color,700,undefined,50,'Editorial Serif'));nodes.push(rect('Header line',80,126,920,1,color,{opacity:0.3}));}
+// Photo-bottom pages: logo only (no rule), cap top at 80px to match the side margin.
+function header(nodes,color) {nodes.push(text('D.one','D.one',80,72,200,26,color,700,undefined,50,'Editorial Serif'));}
 function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));}
 
 export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) {
@@ -80,7 +80,6 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
       nodes.push({...img('Article photo',photo.gray,px,slot.y+py,pw,ph),clip:slot});
     }
     if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:0.76}));
-    // Photo-bottom titles sit 64px under the header rule, the same gap as title → body.
     let y=overlay?365:top?750:174;
     const headline=text('Card title',card.title,80,y,920,55,color,700,measure,160);nodes.push(headline);
     const bodyY=y+headline.height+64;
