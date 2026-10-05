@@ -29,7 +29,7 @@ figma.ui.onmessage=async(message)=>{
         }else{
           node=n.type==='ellipse'?figma.createEllipse():figma.createRectangle();node.resize(n.width,n.height);
           if(n.type==='image')node.fills=[{type:'IMAGE',imageHash:hashes[n.src],scaleMode:'FILL'}];
-          else if(n.fill==='gradient')node.fills=[{type:'GRADIENT_LINEAR',gradientTransform:[[0,1,0],[1,0,0]],gradientStops:[{position:0,color:{r:0,g:0,b:0,a:0}},{position:0.5,color:{r:0,g:0,b:0,a:0.8}},{position:1,color:{r:0,g:0,b:0,a:1}}]}];
+          else if(n.fill==='gradient')node.fills=[{type:'GRADIENT_LINEAR',gradientTransform:[[0,1,0],[1,0,0]],gradientStops:n.gradientStops.map(s=>({position:s.position,color:{r:0,g:0,b:0,a:s.opacity}}))}];
           else node.fills=[{type:'SOLID',color:color(n.fill)}];
         }
         if(n.clip){

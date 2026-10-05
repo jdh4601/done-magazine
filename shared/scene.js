@@ -2,6 +2,8 @@ import {bodyTemplate,ENDING_TEMPLATE,templateUrl} from './templates.js';
 import {photoRoles,coverFit} from './photos.js';
 export const WIDTH=1080, HEIGHT=1350;
 const INK='#0A0A0A', PAPER='#EDEAE3', BLUE='#1712FF';
+// Matches the Figma cover spec: linear #000 at 0% opacity → 100% opacity at the 62% stop.
+const COVER_GRADIENT_STOPS=[{position:0,opacity:0},{position:0.62,opacity:1}];
 const DEFAULT_MEASURE=(text,size)=>Array.from(text).reduce((sum,c)=>sum+(/\s/.test(c)?0.3:/[\u0000-\u007f]/.test(c)?0.54:1)*size,0);
 export function wrapText(value,width,size,measure=DEFAULT_MEASURE) {
   const result=[];
@@ -52,8 +54,8 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
     }
     coverNodes.push(img('Cutout subject',asset.subject,fx,fy,fw,fh));
   }
+  coverNodes.push(rect('Title gradient',0,940,WIDTH,410,'gradient',{gradientStops:COVER_GRADIENT_STOPS}));
   if(!originalCover){
-    coverNodes.push(rect('Title gradient',0,940,WIDTH,410,'gradient'));
     coverNodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT),opacity:.45});
   }
   brand(coverNodes);
@@ -92,7 +94,8 @@ export function sceneSvg(scene,resolveImage=s=>s) {
   for(const [index,n] of scene.nodes.entries()) {
     const opacity=n.opacity??1; const rotation=n.rotation?` transform="rotate(${n.rotation} ${n.x} ${n.y})"`:'';
     if(n.type==='rect'||n.type==='ellipse') {
-      const fill=n.fill==='gradient'?'url(#shade)':n.fill;
+      const fill=n.fill==='gradient'?`url(#shade-${index})`:n.fill;
+      if(n.fill==='gradient')content+=`<defs><linearGradient id="shade-${index}" x1="0" y1="0" x2="0" y2="1">${n.gradientStops.map(s=>`<stop offset="${s.position}" stop-color="#000" stop-opacity="${s.opacity}"/>`).join('')}</linearGradient></defs>`;
       const attrs=`fill="${escapeXml(fill)}" opacity="${opacity}"${rotation}${n.blend?' style="mix-blend-mode:multiply"':''}`;
       content+=n.type==='ellipse'?`<ellipse cx="${n.x+n.width/2}" cy="${n.y+n.height/2}" rx="${n.width/2}" ry="${n.height/2}" ${attrs}/>`:`<rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" ${attrs}/>`;
     } else if(n.type==='image'){
@@ -101,5 +104,5 @@ export function sceneSvg(scene,resolveImage=s=>s) {
     }
     else if(n.type==='text') content+=`<text x="${n.x}" y="${n.y}" fill="${escapeXml(n.color)}" font-family="${n.fontFamily==='Editorial Serif'?'Playfair Display':escapeXml(n.fontFamily)}" font-size="${n.fontSize}" font-weight="${n.fontWeight}">${n.text.split('\n').map((l,i)=>`<tspan x="${n.x}" y="${n.y+n.fontSize+i*n.lineHeight}">${escapeXml(l)}</tspan>`).join('')}</text>`;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="0.5" stop-color="#000" stop-opacity="0.8"/><stop offset="1" stop-color="#000"/></linearGradient></defs>${content}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}">${content}</svg>`;
 }
