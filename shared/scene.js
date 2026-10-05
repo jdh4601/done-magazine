@@ -1,6 +1,6 @@
 import {bodyTemplate,ENDING_TEMPLATE,templateUrl} from './templates.js';
 import {photoRoles,coverFit} from './photos.js';
-import {LOGO_PATH,LOGO_TEXT,logoTransform} from './logo.js';
+import {LOGO_PATH,LOGO_TEXT,logoBoxFor,logoTransform} from './logo.js';
 export const WIDTH=1080, HEIGHT=1350;
 const INK='#0A0A0A', PAPER='#EDEAE3', BLUE='#1712FF';
 // Matches the Figma cover spec: linear #000 at 0% opacity → 100% opacity at the 62% stop.
@@ -29,7 +29,6 @@ function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,
 }
 const rect=(name,x,y,width,height,fill,extra={})=>({type:'rect',name,x,y,width,height,fill,...extra});
 const img=(name,photo,x,y,width,height)=>({type:'image',name,src:photo,x,y,width,height});
-function brand(nodes,color= '#fff') {nodes.push(text('D.one','D.one',848,74,152,36,color,700,undefined,100,'Editorial Serif'));}
 // Photo-bottom pages: logo only (no rule), cap top at 80px to match the side margin.
 function header(nodes,color) {nodes.push(text('D.one','D.one',80,72,200,26,color,700,undefined,50,'Editorial Serif'));}
 function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));}
@@ -61,12 +60,15 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
   if(!originalCover){
     coverNodes.push({...img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT),opacity:.45});
   }
-  brand(coverNodes);
   const coverTitle=text('Cover title',draft.title,80,1030,920,90,'#fff',800,measure,350);
   coverTitle.lineHeight=108;coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight;
   coverTitle.overflow=coverTitle.height>350;
-  coverTitle.y= Math.max(880,Math.min(1050,1290-coverTitle.height));
+  coverTitle.y=Math.max(880,Math.min(1050,1290-coverTitle.height))+10;
   coverNodes.push(coverTitle);
+  // Hangul in Pretendard ExtraBold 90px ends ~8px below the baseline; the logo sits 20px under that.
+  const titleBottom=coverTitle.y+coverTitle.fontSize+(coverTitle.height-coverTitle.lineHeight)+8;
+  const logoBox=logoBoxFor(WIDTH/2,titleBottom+20,36);
+  coverNodes.push(text('D.one','D.one',logoBox.x,logoBox.y,152,36,'#fff',700,undefined,100,'Editorial Serif'));
   scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
   draft.cards.forEach((card,i)=>{
     const template=bodyTemplate(i),layout=card.layoutOverride||template.layout;

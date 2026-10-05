@@ -72,3 +72,17 @@ test('Photo-top and overlay pages keep the footer at the bottom',()=>{
     assert.ok(!nodes.some(n=>n.name==='Header line'));
   }
 });
+test('Cover logo sits centered 20px under the title, which is 10px lower than before, with no top-right logo',()=>{
+  for(const lines of [1,2,3]){
+    const p=project(1);p.draft.title=Array.from({length:lines},()=>'창업가를 기르는 법').join('\n');
+    const nodes=makeScenes(p)[0].nodes,title=nodes.find(n=>n.name==='Cover title'),logos=nodes.filter(n=>n.name==='D.one');
+    assert.equal(logos.length,1);
+    const logo=logos[0],height=lines*108;
+    assert.equal(title.y,Math.max(880,Math.min(1050,1290-height))+10);
+    const lastBaseline=title.y+90+(lines-1)*108,glyphBottom=lastBaseline+8;
+    assert.ok(Math.abs(logo.y+36-0.708*36-(glyphBottom+20))<0.5,`${lines} lines: logo cap top is not 20px below the title`);
+    const left=logo.x+0.034*36,width=211.208*36/80;
+    assert.ok(Math.abs(left+width/2-540)<0.5,'logo is not horizontally centered');
+    assert.ok(logo.y+36<1350,'logo runs off the page');
+  }
+});
