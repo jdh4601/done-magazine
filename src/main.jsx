@@ -40,6 +40,7 @@ function App(){
       return {...c,layoutOverride:page.layout,templateOverride:page.templateFile,photoAssigned:true,photoId:p.photos.find(photo=>photo.gray===src)?.id||null};
     });
   }
+  useEffect(()=>{document.querySelector('.page-thumb.selected')?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});},[selected,project?.draft.cards]);
   function movePage(id,target){
     if(!project||busy||exporting)return;
     const cards=pinPages(project),from=cards.findIndex(c=>c.id===id);
@@ -195,7 +196,7 @@ function App(){
           const movable=i>0&&i<scenes.length-1,canDelete=!busy&&!exporting&&project.draft.cards.length>1;
           const thumb=<button key={s.id} className={`page-thumb ${selected===i?'selected':''} ${dragged===s.id?'dragging':''}`} draggable={movable&&!busy&&!exporting} aria-label={`${i+1}페이지 ${movable?'본문, 드래그하여 순서 이동':s.kind==='cover'?'표지':'엔딩'}`} onDragStart={e=>{setDragged(s.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',s.id);}} onDragEnd={()=>setDragged(null)} onDragOver={e=>{if(movable&&dragged){e.preventDefault();e.dataTransfer.dropEffect='move';}}} onDrop={e=>{e.preventDefault();if(movable)movePage(e.dataTransfer.getData('text/plain'),i-1);}} onKeyDown={e=>{if(movable&&e.altKey&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();movePage(s.id,i-1+(e.key==='ArrowRight'?1:-1));}if(movable&&canDelete&&['Delete','Backspace'].includes(e.key)){e.preventDefault();removePage(s.id);}}} onClick={()=>{setSelected(i);setVariants(false);}}><div dangerouslySetInnerHTML={{__html:sceneSvg(s)}}/><span>{String(i+1).padStart(2,'0')} <small>{i===0?'표지':i===scenes.length-1?'엔딩':'본문'}</small></span></button>;
           if(!movable)return thumb;
-          return <div key={s.id} className="page-slot">{thumb}<button className="page-delete" aria-label={`${i+1}페이지 삭제`} title={canDelete?'페이지 삭제':'본문 페이지는 최소 1장이 필요합니다'} disabled={!canDelete} onClick={()=>removePage(s.id)}><Trash2 size={11}/></button></div>;
+          return <div key={s.id} className="page-slot">{thumb}<button className="page-delete" aria-label={`${i+1}페이지 삭제`} title={canDelete?'페이지 삭제':'본문 페이지는 최소 1장이 필요합니다'} disabled={!canDelete} onClick={()=>removePage(s.id)}><Trash2 size={11}/></button><div className="page-move"><button aria-label={`${i+1}페이지를 앞으로 한 칸 이동`} title="앞으로 한 칸 (Alt+←)" disabled={!!busy||exporting||i===1} onClick={()=>movePage(s.id,i-2)}><ChevronLeft size={12}/></button><button aria-label={`${i+1}페이지를 뒤로 한 칸 이동`} title="뒤로 한 칸 (Alt+→)" disabled={!!busy||exporting||i===scenes.length-2} onClick={()=>movePage(s.id,i)}><ChevronRight size={12}/></button></div></div>;
         })}<button className="add-page" aria-label="본문 페이지 추가" onClick={addPage} disabled={!!busy||exporting||project.draft.cards.length>=30}><Plus size={28}/><span>본문 페이지 추가</span></button></div>:<div className="empty-strip"><span>표지</span><ArrowRight size={14}/><span>내용에 맞는 본문</span><ArrowRight size={14}/><span>D.one 엔딩</span></div>}
 
       </main>
