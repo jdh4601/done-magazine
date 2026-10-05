@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {videoId,parseTranscript} from '../server/transcript.js';
-import {validateEvidence} from '../server/codex.js';
+import {validateEvidence,normalizePhotoPlan} from '../server/codex.js';
 import {makeScenes,sceneSvg,wrapText} from '../shared/scene.js';
 
 test('Only genuine YouTube video URLs are accepted',()=>{
@@ -41,12 +41,24 @@ test('Explicit line breaks are kept; body fits without clipping',()=>{
   const scenes=makeScenes({draft:{title:'대표의 외로움을\n무기로 바꾸는 방법',cards:[{id:'c1',title:'먼저 고객과 대화하라',body:'초기 고객의 구체적인 문제를 찾고 작은 제품으로 해결한다. '.repeat(4),layout:'dark-top',emphasis:''}]}});
   const body=scenes[1].nodes.find(n=>n.name==='Card body');assert.ok(!body.overflow);assert.ok(body.y+body.height<1250);
 });
+test('Selective colour preserves photo alignment without decorative orange shapes',()=>{
+  const asset={id:'photo',blue:'/blue.png',gray:'/gray.png',subject:'/subject.png',accents:'/accents.png',coverStyleVersion:2,subjectWidth:1600,subjectHeight:900};
+  for(const variant of [0,1,2]){
+    const cover=makeScenes({coverPhotoId:'photo',draft:{title:'제목',cards:[]}},[asset],variant)[0];
+    const layers=cover.nodes.filter(n=>n.type==='image'&&n.src!='/assets/editorial-grain.png');
+    assert.equal(layers.length,3);
+    assert.deepEqual(layers.map(n=>[n.x,n.y,n.width,n.height]),Array(3).fill([layers[0].x,layers[0].y,layers[0].width,layers[0].height]));
+    assert.ok(!cover.nodes.some(n=>n.type==='ellipse'||n.fill==='#FF660F'));
+  }
+  assert.deepEqual(normalizePhotoPlan({subject:{x:-.1,y:.2,width:2,height:1},accents:[]}).subject,{label:'사진 요소',x:0,y:.2,width:1,height:.8});
+  assert.throws(()=>normalizePhotoPlan({subject:{x:NaN,y:0,width:1,height:1}}));
+});
 test('Figma import uses loaded fonts, native text and separate image/shape layers',async()=>{
   const code=await fs.readFile(new URL('../figma-plugin/code.js',import.meta.url),'utf8');const created=[],messages=[],loaded=new Set();
   function node(type){return {type,removed:false,x:0,y:0,width:100,height:100,children:[],resize(w,h){this.width=w;this.height=h;},appendChild(n){this.children.push(n);},remove(){this.removed=true;}};}
-  const figma={showUI(){},ui:{postMessage:m=>messages.push(m)},currentPage:{children:[],selection:[]},viewport:{scrollAndZoomIntoView(){}},listAvailableFontsAsync:async()=>['Noto Sans KR','Playfair Display'].flatMap(family=>['Regular','Bold'].map(style=>({fontName:{family,style}}))),loadFontAsync:async f=>loaded.add(`${f.family}-${f.style}`),base64Decode:s=>new Uint8Array(Buffer.from(s,'base64')),createImage:()=>({hash:'image-hash'}),createFrame:()=>{const f=node('FRAME');created.push(f);return f;},createText:()=>{const t=node('TEXT');Object.defineProperty(t,'characters',{set(s){assert.ok(loaded.has(`${t.fontName.family}-${t.fontName.style}`));t._characters=s;},get(){return t._characters;}});return t;},createRectangle:()=>node('RECTANGLE'),createEllipse:()=>node('ELLIPSE')};
+  const figma={showUI(){},ui:{postMessage:m=>messages.push(m)},currentPage:{children:[],selection:[]},viewport:{scrollAndZoomIntoView(){}},listAvailableFontsAsync:async()=>['Pretendard','Playfair Display'].flatMap(family=>['Regular','Bold','ExtraBold'].map(style=>({fontName:{family,style}}))),loadFontAsync:async f=>loaded.add(`${f.family}-${f.style}`),base64Decode:s=>new Uint8Array(Buffer.from(s,'base64')),createImage:()=>({hash:'image-hash'}),createFrame:()=>{const f=node('FRAME');created.push(f);return f;},createText:()=>{const t=node('TEXT');Object.defineProperty(t,'characters',{set(s){assert.ok(loaded.has(`${t.fontName.family}-${t.fontName.style}`));t._characters=s;},get(){return t._characters;}});return t;},createRectangle:()=>node('RECTANGLE'),createEllipse:()=>node('ELLIPSE')};
   const context=vm.createContext({figma,__html__:'',Uint8Array});vm.runInContext(code,context);
   const scenes=makeScenes({draft:{title:'검증 제목',cards:[]}});
-  await figma.ui.onmessage({type:'import',document:{version:1,scenes,assets:{'/assets/noise.png':'aW1hZ2U='}}});
-  assert.equal(created.length,2);assert.ok(created[0].children.some(n=>n.type==='TEXT'));assert.ok(created[0].children.some(n=>n.type==='ELLIPSE'));assert.equal(messages.at(-1).type,'complete');
+  await figma.ui.onmessage({type:'import',document:{version:1,scenes,assets:{'/assets/editorial-grain.png':'aW1hZ2U=','/templates/%237.jpg':'aW1hZ2U='}}});
+  assert.equal(created.length,2);assert.ok(created[0].children.some(n=>n.type==='TEXT'));assert.ok(!created[0].children.some(n=>n.type==='ELLIPSE'));assert.equal(messages.at(-1).type,'complete');
 });

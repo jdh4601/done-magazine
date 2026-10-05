@@ -1,5 +1,6 @@
+import {bodyTemplate,ENDING_TEMPLATE,templateUrl} from './templates.js';
 export const WIDTH=1080, HEIGHT=1350;
-const INK='#0A0A0A', PAPER='#EDEAE3', ORANGE='#FF660F', BLUE='#1712FF';
+const INK='#0A0A0A', PAPER='#EDEAE3', BLUE='#1712FF';
 const DEFAULT_MEASURE=(text,size)=>Array.from(text).reduce((sum,c)=>sum+(/\s/.test(c)?0.3:/[\u0000-\u007f]/.test(c)?0.54:1)*size,0);
 export function wrapText(value,width,size,measure=DEFAULT_MEASURE) {
   const result=[];
@@ -17,54 +18,57 @@ export function wrapText(value,width,size,measure=DEFAULT_MEASURE) {
   }
   return result;
 }
-function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,font='Noto Sans KR') {
-  let lines, lineHeight;
-  do {lines=wrapText(value,width,size,measure?(v,s)=>measure(v,s,weight,font):undefined);lineHeight=Math.round(size*1.45);if(lines.length*lineHeight<=maxHeight)break;size-=1;} while(size>=22);
-  return {type:'text',name,text:lines.join('\n'),x,y,width,height:lines.length*lineHeight+8,fontSize:size,lineHeight,color,fontFamily:font,fontWeight:weight,overflow:lines.length*lineHeight>maxHeight};
+function text(name,value,x,y,width,size,color,weight=400,measure,maxHeight=9999,font='Pretendard') {
+  const lines=wrapText(value,width,size,measure?(v,s)=>measure(v,s,weight,font):undefined);
+  const lineHeight=Math.round(size*1.45),height=lines.length*lineHeight;
+  return {type:'text',name,text:lines.join('\n'),x,y,width,height,fontSize:size,lineHeight,color,fontFamily:font,fontWeight:weight,overflow:height>maxHeight};
 }
 const rect=(name,x,y,width,height,fill,extra={})=>({type:'rect',name,x,y,width,height,fill,...extra});
 const img=(name,photo,x,y,width,height)=>({type:'image',name,src:photo,x,y,width,height});
-function brand(nodes,color= '#fff') {nodes.push(text('D.one','D.one',80,46,350,36,color,700,undefined,100,'Editorial Serif'));}
+function brand(nodes,color= '#fff') {nodes.push(text('D.one','D.one',848,74,152,36,color,700,undefined,100,'Editorial Serif'));}
 function footer(nodes,color) {nodes.push(rect('Footer line',80,1248,920,1,color,{opacity:0.3}));nodes.push(text('D.one','D.one',80,1268,200,26,color,700,undefined,50,'Editorial Serif'));nodes.push(text('Magazine','MAGAZINE',865,1280,135,12,color,400));}
 
 export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) {
   if(!project?.draft)return [];
   const scenes=[]; const {draft}=project;
   const asset=assets.find(a=>a.id===project.coverPhotoId)||assets[0];
-  const layoutVariants=[{circle:[340,200,860,860],subject:[230,300,670,700],stripe:[-80,150,510,90,-17]},{circle:[-90,260,900,900],subject:[280,250,660,770],stripe:[740,80,440,85,22]},{circle:[300,310,860,860],subject:[80,230,740,790],stripe:[-80,130,450,90,-13]}];
-  const variantLayout=layoutVariants[variant%3];
+  const cropVariants=[[0,0,1080,1350],[-75,-35,1188,1485],[-25,-90,1188,1485]];
+  const crop=cropVariants[variant%3];
   const coverNodes=[rect('Background',0,0,WIDTH,HEIGHT,INK)];
-  if(asset) {coverNodes.push(img('Background photo',asset.gray,0,0,WIDTH,HEIGHT));coverNodes.push(rect('Blue multiply',0,0,WIDTH,HEIGHT,BLUE,{blend:'multiply'}));}
-  const [cx,cy,cw,ch]=variantLayout.circle;
-  coverNodes.push({type:'ellipse',name:'Orange circle',x:cx,y:cy,width:cw,height:ch,fill:ORANGE});
-  const [sx,sy,sw,sh,sr]=variantLayout.stripe;
-  coverNodes.push(rect('Orange strip',sx,sy,sw,sh,ORANGE,{rotation:sr}));
   if(asset) {
-    let [fx,fy,fw,fh]=variantLayout.subject;
-    const ratio=asset.subjectWidth/asset.subjectHeight;
-    if(fw/fh>ratio) {const newWidth=fh*ratio;fx+=(fw-newWidth)/2;fw=newWidth;} else {const newHeight=fw/ratio;fy+=fh-newHeight;fh=newHeight;}
+    coverNodes.push(img('Blue photographic background',asset.blue||asset.gray,...crop));
+    if(!asset.blue)coverNodes.push(rect('Blue multiply',...crop,BLUE,{blend:'multiply'}));
+    if(asset.accents)coverNodes.push(img('Orange secondary objects',asset.accents,...crop));
+  }
+  if(asset) {
+    let [fx,fy,fw,fh]=asset.coverStyleVersion>=2?crop:[190,180,700,850];
+    if(!(asset.coverStyleVersion>=2)){
+      const ratio=asset.subjectWidth/asset.subjectHeight;
+      if(fw/fh>ratio) {const newWidth=fh*ratio;fx+=(fw-newWidth)/2;fw=newWidth;} else {const newHeight=fw/ratio;fy+=fh-newHeight;fh=newHeight;}
+    }
     coverNodes.push(img('Cutout subject',asset.subject,fx,fy,fw,fh));
   }
   coverNodes.push(rect('Title gradient',0,830,WIDTH,520,'gradient'));
-  coverNodes.push(img('Print grain','/assets/noise.png',0,0,WIDTH,HEIGHT));
+  coverNodes.push(img('Dry ink and paper grain','/assets/editorial-grain.png',0,0,WIDTH,HEIGHT));
   brand(coverNodes);
-  coverNodes.push(text('Section label',draft.sectionLabel ?? 'FOUNDER’S NOTE',760,58,260,16,'#fff',400,measure,80));
-  const coverTitle=text('Cover title',draft.title,80,1030,920,78,'#fff',700,measure,350);
-  coverTitle.lineHeight=Math.round(coverTitle.fontSize*1.2);coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight+8;
+  const coverTitle=text('Cover title',draft.title,80,1030,920,90,'#fff',800,measure,350);
+  coverTitle.lineHeight=108;coverTitle.height=coverTitle.text.split('\n').length*coverTitle.lineHeight;
+  coverTitle.overflow=coverTitle.height>350;
   coverTitle.y= Math.max(880,Math.min(1050,1290-coverTitle.height));
   coverNodes.push(coverTitle);
   scenes.push({id:'cover',name:'01 · 표지',kind:'cover',width:WIDTH,height:HEIGHT,nodes:coverNodes});
   draft.cards.forEach((card,i)=>{
+    const template=bodyTemplate(i),layout=template.layout;
     const photo=assets.find(a=>a.id===card.photoId)||assets[i%Math.max(assets.length,1)];
-    const paper=card.layout.startsWith('paper');const color=paper?INK:'#fff';
+    const paper=layout.startsWith('paper');const color=paper?INK:'#fff';
     const nodes=[rect('Background',0,0,WIDTH,HEIGHT,paper?PAPER:INK)];
-    const overlay=card.layout==='photo-overlay';const top=card.layout.endsWith('top');
+    const overlay=layout==='photo-overlay';const top=layout.endsWith('top');
     if(photo) nodes.push(img('Article photo',photo.gray,0,overlay?0:top?0:675,WIDTH,overlay?HEIGHT:675));
     if(overlay)nodes.push(rect('Photo shade',0,0,WIDTH,HEIGHT,'#000',{opacity:0.76}));
     let y=overlay?365:top?750:155;
-    const headline=text('Card title',card.title,80,y,920,52,color,700,measure,160);nodes.push(headline);
-    const bodyY=y+headline.height+60;
-    const body=text('Card body',card.body,80,bodyY,920,32,color,400,measure,Math.max(100,(overlay?1190:top?1225:645)-bodyY));nodes.push(body);
+    const headline=text('Card title',card.title,80,y,920,55,color,700,measure,160);nodes.push(headline);
+    const bodyY=y+headline.height+64;
+    const body=text('Card body',card.body,80,bodyY,920,30,color,400,measure,Math.max(0,(overlay?1190:top?1225:645)-bodyY));nodes.push(body);
     if(card.emphasis && body.text.replace(/\s/g,'').includes(card.emphasis.replace(/\s/g,''))) {
       // Underlines are independent shapes; text remains editable in Figma.
       const lines=body.text.split('\n');const needle=card.emphasis.replace(/\s/g,'');
@@ -72,12 +76,10 @@ export function makeScenes(project,assets=[],variant=0,measure=DEFAULT_MEASURE) 
       lines.forEach((l,j)=>{const compactLine=l.replace(/\s/g,'');const a=Math.max(0,start-consumed),b=Math.min(compactLine.length,end-consumed);if(start>=0&&a<b)nodes.push(rect('Emphasis underline',body.x,body.y+(j+1)*body.lineHeight-1,Math.min(body.width,measure(l,body.fontSize)),1.4,color));consumed+=compactLine.length;});
     }
     footer(nodes,overlay?'#fff':photo&&!top?paper?'#fff':'#fff':color);
-    scenes.push({id:card.id,name:`${String(i+2).padStart(2,'0')} · ${card.title}`,kind:'article',width:WIDTH,height:HEIGHT,nodes});
+    scenes.push({id:card.id,name:`${String(i+2).padStart(2,'0')} · ${card.title}`,kind:'article',templateFile:template.file,layout,width:WIDTH,height:HEIGHT,nodes});
   });
-  const end=[];end.push(rect('Background',0,0,WIDTH,HEIGHT,'#000'));
-  end.push(text('D.one',draft.endingTitle ?? 'D.one',320,550,650,150,'#fff',700,measure,250,'Editorial Serif'));
-  end.push(text('Tagline',draft.endingSubtitle ?? 'D o  o n e  a n d  D o n e',340,750,650,35,'#fff',400,measure,150,'Editorial Serif'));
-  scenes.push({id:'ending',name:`${String(scenes.length+1).padStart(2,'0')} · 엔딩`,kind:'ending',width:WIDTH,height:HEIGHT,nodes:end});
+  const end=[img('Original ending template',templateUrl(ENDING_TEMPLATE),0,0,WIDTH,HEIGHT)];
+  scenes.push({id:'ending',name:`${String(scenes.length+1).padStart(2,'0')} · 엔딩`,kind:'ending',templateFile:ENDING_TEMPLATE,width:WIDTH,height:HEIGHT,nodes:end});
   return scenes;
 }
 export function escapeXml(value) {return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));}

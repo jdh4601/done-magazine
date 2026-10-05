@@ -12,8 +12,9 @@ figma.ui.onmessage=async(message)=>{
     for(const scene of doc.scenes)for(const n of scene.nodes)if(n.type==='text'){
       const family=n.fontFamily==='Editorial Serif'?'Playfair Display':n.fontFamily;
       const choices=fonts.filter(f=>f.fontName.family===family);
-      const preferred=choices.find(f=>f.fontName.style===(n.fontWeight>=600?'Bold':'Regular')) || choices[0];
-      if(!preferred)throw new Error(`${family} 글꼴을 설치하고 Figma를 다시 실행하세요. 웹 앱의 README를 확인해 주세요.`);
+      const style=n.fontWeight>=800?'ExtraBold':n.fontWeight>=600?'Bold':'Regular';
+      const preferred=choices.find(f=>f.fontName.style.replace(/\s/g,'')===style);
+      if(!preferred)throw new Error(`${family} ${style} 글꼴을 설치하고 Figma를 다시 실행하세요. 웹 앱의 README를 확인해 주세요.`);
       const key=`${family}-${n.fontWeight}`;requested.set(key,preferred.fontName);
     }
     for(const font of requested.values())await figma.loadFontAsync(font);

@@ -12,6 +12,7 @@ import { downloadTranscript, parseTranscript, videoId } from './transcript.js';
 import { generateMagazine } from './codex.js';
 import { processPhoto, ensureNoise } from './photos.js';
 import { sceneSvg } from '../shared/scene.js';
+import {ENDING_TEMPLATE,templateUrl} from '../shared/templates.js';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const data=path.join(root,'data');await fs.mkdir(data,{recursive:true});await ensureNoise(root);
@@ -27,6 +28,7 @@ app.use('/api',(req,res,next)=>{
   next();
 });
 app.use('/assets',express.static(data,{dotfiles:'deny',index:false}));
+app.use('/templates',express.static(path.join(root,'templates'),{dotfiles:'deny',index:false}));
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:15*1024*1024,files:8},fileFilter:(req,file,cb)=>cb(null,['image/jpeg','image/png','image/webp'].includes(file.mimetype))});
 const jobs=new Map();let activeGeneration=false,photoQueue=Promise.resolve();
 function job(kind,task) {
@@ -46,6 +48,17 @@ app.post('/api/photos',upload.array('photos',8),(req,res)=>{
   if(!req.files?.length)return res.status(400).json({error:'JPG, PNG, WebP 사진을 선택하세요. (사진당 15MB 이하)'});
   const id=job('photos',progress=>{
     const promise=photoQueue.then(async()=>{const list=[];for(let i=0;i<req.files.length;i++){progress(`사진 ${i+1}/${req.files.length} 처리 중`);list.push(await processPhoto(req.files[i],root,randomUUID(),m=>progress(`사진 ${i+1}/${req.files.length} · ${m}`)));}return list;});photoQueue=promise.catch(()=>{});return promise;
+  });res.json({jobId:id});
+});
+app.post('/api/photos/restyle',(req,res)=>{
+  const photos=req.body.photos;
+  try{if(!Array.isArray(photos)||!photos.length||photos.length>8)throw new Error('다시 처리할 사진을 선택하세요.');for(const p of photos)safeId(p.id);}catch(e){return res.status(400).json({error:e.message});}
+  const id=job('photos',progress=>{
+    const promise=photoQueue.then(async()=>{
+      const list=[];
+      for(const p of photos){const buffer=await fs.readFile(path.join(data,'photos',p.id,'original.png'));const updated=await processPhoto({buffer,originalname:p.name},root,randomUUID(),progress);list.push({...updated,previousId:p.id});}
+      return list;
+    });photoQueue=promise.catch(()=>{});return promise;
   });res.json({jobId:id});
 });
 app.post('/api/generate',async(req,res)=>{
@@ -83,7 +96,11 @@ async function packageScenes(scenes) {
   for(const scene of scenes) {
     if(scene.width!==1080||scene.height!==1350||!Array.isArray(scene.nodes)||scene.nodes.length>100)throw new Error('잘못된 페이지 형식입니다.');
     for(const n of scene.nodes)if(n.type==='image'&&!assets[n.src]) {
-      if(!/^\/assets\/(noise\.png|photos\/[a-f0-9-]{36}\/(gray|subject|original)\.png)$/.test(n.src))throw new Error('잘못된 이미지 경로입니다.');
+      if(n.src===templateUrl(ENDING_TEMPLATE)){
+        assets[n.src]=(await fs.readFile(path.join(root,'templates',ENDING_TEMPLATE))).toString('base64');
+        continue;
+      }
+      if(!/^\/assets\/((noise|editorial-grain)\.png|photos\/[a-f0-9-]{36}\/(gray|subject|original|blue|accents)\.png)$/.test(n.src))throw new Error('잘못된 이미지 경로입니다.');
       assets[n.src]=(await fs.readFile(path.join(data,n.src.slice('/assets/'.length)))).toString('base64');
     }
   }
@@ -94,7 +111,7 @@ app.post('/api/export/png',async(req,res)=>{
   try {
     const bundle=await packageScenes(req.body.scenes);const zip=new JSZip();
     for(let i=0;i<bundle.scenes.length;i++) {
-      const scene=bundle.scenes[i];const svg=sceneSvg(scene,src=>`data:image/png;base64,${bundle.assets[src]}`);
+      const scene=bundle.scenes[i];const svg=sceneSvg(scene,src=>`data:image/${src.endsWith('.jpg')?'jpeg':'png'};base64,${bundle.assets[src]}`);
       const buffer=await sharp(Buffer.from(svg)).png().toBuffer();zip.file(`${String(i+1).padStart(2,'0')}-${scene.kind}.png`,buffer);
     }
     res.setHeader('Content-Type','application/zip');res.setHeader('Content-Disposition','attachment; filename="D.one-magazine.zip"');res.send(await zip.generateAsync({type:'nodebuffer'}));
